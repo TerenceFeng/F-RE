@@ -4,10 +4,12 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <curand_kernel.h>
-//#include <>
 
 //cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
-#define SAMPLE 10
+#define SAMPLE 1000
+#ifdef M_PI
+#undef M_PI
+#endif
 #define M_PI 3.141592653
 #define WIDTH 1024
 #define HEIGHT 768
@@ -104,12 +106,12 @@ enum EReflType
 };
 struct Sphere
 {
-	Vec p, e, c;      // position, emission, color
 	double rad;       // radius
+	Vec p, e, c;      // position, emission, color
 	EReflType refl;      // reflection type (DIFFuse, SPECular, REFRactive)
-	Sphere(double rad_, Vec p_, Vec e_, Vec c_, EReflType refl_) :
-		rad(rad_), p(p_), e(e_), c(c_), refl(refl_)
-	{}
+	/* Sphere(double rad_, Vec p_, Vec e_, Vec c_, EReflType refl_) : */
+	/*     rad(rad_), p(p_), e(e_), c(c_), refl(refl_) */
+	/* {} */
 };
 
 // Intersection Test
@@ -154,126 +156,126 @@ __device__ bool intersect_all(const Ray *r, double *t, int *id, const Sphere *sp
 
 __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Sphere *spheres)
 {
-	vec_assign(radiance, 1.0, 1.0, 0.0);
-	return;
-	//Vec prev_f = { 1.0, 1.0, 1.0 };
-	//Ray r = *_r;
-	//for (int depth = 0; ; ++depth)
-	//{
-	//	double t; // distance to intersection
-	//	const Sphere *obj; // the hit object
-	//	{
-	//		int id = 0;
-	//		if (!intersect_all(&r, &t, &id, spheres))
-	//		{
-	//			break;
-	//		}
-	//		obj = spheres + id;
-	//	}
+	/* vec_assign(radiance, 1.0, 1.0, 0.0); */
+	/* return; */
+	Vec prev_f = { 1.0, 1.0, 1.0 };
+	Ray r = *_r;
+	for (int depth = 0; ; ++depth)
+	{
+		double t; // distance to intersection
+		const Sphere *obj; // the hit object
+		{
+			int id = 0;
+			if (!intersect_all(&r, &t, &id, spheres))
+			{
+				break;
+			}
+			obj = spheres + id;
+		}
 
-	//	Vec x, n, nl, f;
-	//	//double p;  // max refl
-	//	{
-	//		// x
-	//		vec_copy(&x, &r.d);
-	//		vec_scale(&x, t);
-	//		vec_add(&x, &x, &r.o);
-	//		// n
-	//		vec_copy(&n, &x);
-	//		vec_sub(&n, &n, &obj->p);
-	//		vec_norm(&n);
-	//		// nl
-	//		if (vec_dot(&n, &r.d) >= 0.0)
-	//			vec_scale(&n, -1.0);
-	//		vec_copy(&nl, &n);
-	//		// f
-	//		vec_copy(&f, &obj->c);
-	//		// p
-	//		//p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
-	//	}
+		Vec x, n, nl, f;
+		//double p;  // max refl
+		{
+			// x
+			vec_copy(&x, &r.d);
+			vec_scale(&x, t);
+			vec_add(&x, &x, &r.o);
+			// n
+			vec_copy(&n, &x);
+			vec_sub(&n, &n, &obj->p);
+			vec_norm(&n);
+			// nl
+			if (vec_dot(&n, &r.d) >= 0.0)
+				vec_scale(&n, -1.0);
+			vec_copy(&nl, &n);
+			// f
+			vec_copy(&f, &obj->c);
+			// p
+			//p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
+		}
 
-	//	if (depth > 5) //R.R.
-	//	{
-	//		// assert( frame >= 1 );
-	//		vec_mul(&prev_f, &prev_f, &obj->e);
-	//		vec_add(radiance, radiance, &prev_f);
-	//		break;
+		if (depth > 5) //R.R.
+		{
+			// assert( frame >= 1 );
+			vec_mul(&prev_f, &prev_f, &obj->e);
+			vec_add(radiance, radiance, &prev_f);
+			break;
 
-	//		//if (curand_uniform_double(state) < p)
-	//		//	vec_scale(&f, 1.0 / p);
-	//		//else
-	//		//{
-	//		//	vec_copy(radiance, &obj->e);
-	//		//	return;
-	//		//}
-	//	}
+			//if (curand_uniform_double(state) < p)
+			//	vec_scale(&f, 1.0 / p);
+			//else
+			//{
+			//	vec_copy(radiance, &obj->e);
+			//	return;
+			//}
+		}
 
-	//	if (obj->refl == DIFF) // Ideal DIFFUSE reflection
-	//	{
-	//		Vec d;
-	//		{
-	//			double r1 = 2.0 * M_PI * curand_uniform_double(state);
-	//			double r2 = curand_uniform_double(state);
-	//			double r2s = sqrt(r2);
-	//			Vec w, u, v;
-	//			// w
-	//			w = nl;
-	//			// u
-	//			vec_zero(&u);
-	//			if (fabs(w.x) > 0.1) u.y = 1.0;
-	//			else u.x = 1.0;
-	//			vec_norm(&u);
-	//			// v
-	//			vec_copy(&v, &w);
-	//			vec_cross(&v, &v, &u);
-	//			// d
-	//			vec_scale(&u, cos(r1) * r2s);
-	//			vec_scale(&v, sin(r1) * r2s);
-	//			vec_scale(&w, sqrt(1 - r2));
-	//			vec_copy(&d, &u);
-	//			vec_add(&d, &d, &v);
-	//			vec_add(&d, &d, &w);
-	//			vec_norm(&d);
-	//		}
+		if (obj->refl == DIFF) // Ideal DIFFUSE reflection
+		{
+			Vec d;
+			{
+				double r1 = 2.0 * M_PI * curand_uniform_double(state);
+				double r2 = curand_uniform_double(state);
+				double r2s = sqrt(r2);
+				Vec w, u, v;
+				// w
+				w = nl;
+				// u
+				vec_zero(&u);
+				if (fabs(w.x) > 0.1) u.y = 1.0;
+				else u.x = 1.0;
+				vec_norm(&u);
+				// v
+				vec_copy(&v, &w);
+				vec_cross(&v, &v, &u);
+				// d
+				vec_scale(&u, cos(r1) * r2s);
+				vec_scale(&v, sin(r1) * r2s);
+				vec_scale(&w, sqrt(1 - r2));
+				vec_copy(&d, &u);
+				vec_add(&d, &d, &v);
+				vec_add(&d, &d, &w);
+				vec_norm(&d);
+			}
 
-	//		vec_mul(&prev_f, &prev_f, &obj->e);
-	//		vec_add(radiance, radiance, &prev_f);
-	//		ray_assign(&r, &x, &d);
-	//		prev_f = f;
-	//		continue;
-	//	}
-	//	else if (obj->refl == SPEC) // Ideal SPECULAR reflection
-	//	{
-	//		Vec d;
-	//		{
-	//			d = n;
-	//			vec_scale(&d, -2.0 * vec_dot(&n, &r.d));
-	//			vec_add(&d, &d, &r.d);
-	//		}
-	//		
-	//		vec_mul(&prev_f, &prev_f, &obj->e);
-	//		vec_add(radiance, radiance, &prev_f);
-	//		ray_assign(&r, &x, &d);
-	//		prev_f = f;
-	//		continue;
-	//	}
-	//	else // Ideal dielectric REFRACTION
-	//	{
-	//		// Not supported yet.
-	//		break;
-	//		//Ray reflRay(x, r.d - n * 2 * n.dot(r.d));
-	//		//bool into = n.dot(nl) > 0;                // Ray from outside going in?
-	//		//double nc = 1, nt = 1.5, nnt = into ? nc / nt : nt / nc, ddn = r.d.dot(nl), cos2t;
-	//		//if ((cos2t = 1 - nnt*nnt*(1 - ddn*ddn)) < 0)    // Total internal reflection
-	//		//	return obj.e + f.mult(radiance(reflRay, depth, state, spheres));
-	//		//Vec tdir = (r.d*nnt - n*((into ? 1 : -1)*(ddn*nnt + sqrt(cos2t)))).norm();
-	//		//double a = nt - nc, b = nt + nc, R0 = a*a / (b*b), c = 1 - (into ? -ddn : tdir.dot(n));
-	//		//double Re = R0 + (1 - R0)*c*c*c*c*c, Tr = 1 - Re, P = .25 + .5*Re, RP = Re / P, TP = Tr / (1 - P);
-	//		//return obj.e + f.mult(depth > 2 ? (curand_uniform(&state) < P ?   // Russian roulette
-	//		//								   radiance(reflRay, depth, state, spheres)*RP : radiance(Ray(x, tdir), depth, state, spheres)*TP) :
-	//		//					  radiance(reflRay, depth, state, spheres)*Re + radiance(Ray(x, tdir), depth, state, spheres)*Tr);
-	//	}
-	//}
+			vec_mul(&prev_f, &prev_f, &obj->e);
+			vec_add(radiance, radiance, &prev_f);
+			ray_assign(&r, &x, &d);
+			prev_f = f;
+			continue;
+		}
+		else if (obj->refl == SPEC) // Ideal SPECULAR reflection
+		{
+			Vec d;
+			{
+				d = n;
+				vec_scale(&d, -2.0 * vec_dot(&n, &r.d));
+				vec_add(&d, &d, &r.d);
+			}
+			
+			vec_mul(&prev_f, &prev_f, &obj->e);
+			vec_add(radiance, radiance, &prev_f);
+			ray_assign(&r, &x, &d);
+			prev_f = f;
+			continue;
+		}
+		else // Ideal dielectric REFRACTION
+		{
+			// Not supported yet.
+			break;
+			//Ray reflRay(x, r.d - n * 2 * n.dot(r.d));
+			//bool into = n.dot(nl) > 0;                // Ray from outside going in?
+			//double nc = 1, nt = 1.5, nnt = into ? nc / nt : nt / nc, ddn = r.d.dot(nl), cos2t;
+			//if ((cos2t = 1 - nnt*nnt*(1 - ddn*ddn)) < 0)    // Total internal reflection
+			//	return obj.e + f.mult(radiance(reflRay, depth, state, spheres));
+			//Vec tdir = (r.d*nnt - n*((into ? 1 : -1)*(ddn*nnt + sqrt(cos2t)))).norm();
+			//double a = nt - nc, b = nt + nc, R0 = a*a / (b*b), c = 1 - (into ? -ddn : tdir.dot(n));
+			//double Re = R0 + (1 - R0)*c*c*c*c*c, Tr = 1 - Re, P = .25 + .5*Re, RP = Re / P, TP = Tr / (1 - P);
+			//return obj.e + f.mult(depth > 2 ? (curand_uniform(&state) < P ?   // Russian roulette
+			//								   radiance(reflRay, depth, state, spheres)*RP : radiance(Ray(x, tdir), depth, state, spheres)*TP) :
+			//					  radiance(reflRay, depth, state, spheres)*Re + radiance(Ray(x, tdir), depth, state, spheres)*Tr);
+		}
+	}
 	
 }
 
@@ -281,8 +283,8 @@ __global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam)
 {
 	const int w = WIDTH, h = HEIGHT;
 	unsigned int seed = threadIdx.x;
-	/*curandState state;
-	curand_init(seed, 0, 0, &state);*/
+	curandState state;
+	curand_init(seed, 0, 0, &state);
 	
 	////blockIdx, blockDim, warpSize
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -351,8 +353,10 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 		{1e5, {50,40.8,-1e5 + 170}, {.0,.0,.0},{.0,.0,.0},DIFF},//Frnt
 		{1e5, {50, 1e5, 81.6},      {.0,.0,.0},{.75,.75,.75},DIFF},//Botm
 		{1e5, {50,-1e5 + 81.6,81.6},{.0,.0,.0},{.75,.75,.75},DIFF},//Top
-		{16.5,{27,16.5,47},         {.0,.0,.0},{0.999,0.999,0.999}, SPEC},//Mirr
-		{16.5,{73,16.5,78},         {.0,.0,.0},{ 0.999,0.999,0.999 }, REFR},//Glas
+		/*
+		 * {16.5,{27,16.5,47},         {.0,.0,.0},{0.999,0.999,0.999}, SPEC},//Mirr
+		 * {16.5,{73,16.5,78},         {.0,.0,.0},{ 0.999,0.999,0.999 }, REFR},//Glas
+		 */
 		{600, {50,681.6 - .27,81.6},{12,12,12},  {.0,.0,.0}, DIFF} //Lite
 	};
 	Ray cam_h = { {50, 52, 295.6}, {0, -0.042612, -1} };
@@ -364,7 +368,7 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-		goto Error;
+		cudaFree(dev_c); return cudaStatus;
 	}
 
 	// Allocate GPU buffers for three vectors (two input, one output)    .
@@ -372,47 +376,50 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaMalloc failed!");
-		goto Error;
+		cudaFree(dev_c); return cudaStatus;
 	}
 	cudaStatus = cudaMalloc((void**)&spheres, 9 * sizeof(Sphere));
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaMalloc failed!");
-		goto Error;
+		cudaFree(dev_c); return cudaStatus;
 	}
 	cudaStatus = cudaMalloc((void**)&cam, sizeof(Ray));
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaMalloc failed!");
-		goto Error;
+		cudaFree(dev_c); return cudaStatus;
 	}
 
 	cudaStatus = cudaMemcpy(spheres, spheres_h, 9 * sizeof(Sphere), cudaMemcpyHostToDevice);
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaMemcpy failed!");
-		goto Error;
+		cudaFree(dev_c); return cudaStatus;
 	}
 	cudaStatus = cudaMemcpy(cam, &cam_h, sizeof(Ray), cudaMemcpyHostToDevice);
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaMemcpy failed!");
-		goto Error;
+		cudaFree(dev_c); return cudaStatus;
 	}
 
 	// Copy input vectors from host memory to GPU buffers.
 
 	// Launch a kernel on the GPU with one thread for each element.
-	const int THREADS_PER_BLOCK = 16;
-	const int BLOCK_COUNT = ((w + 15) / 4) * ((h + 15) / 4);
-	radiance_kernel<<<THREADS_PER_BLOCK, BLOCK_COUNT>>>(dev_c, spheres, cam);
+	/* const int THREADS_PER_BLOCK = 16; */
+	dim3 blockD(8, 8);
+	/* const int BLOCK_COUNT = ((w + 15) / 4) * ((h + 15) / 4); */
+	dim3 gridD((w + 15) / 8, (h + 15) / 8);
+	/* radiance_kernel<<<THREADS_PER_BLOCK, BLOCK_COUNT>>>(dev_c, spheres, cam); */
+	radiance_kernel<<<gridD, blockD>>>(dev_c, spheres, cam);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "radiance_kernel() launch failed: %s\n", cudaGetErrorString(cudaStatus));
-		goto Error;
+		cudaFree(dev_c); return cudaStatus;
 	}
 
 	// cudaDeviceSynchronize waits for the kernel to finish, and returns
@@ -421,7 +428,7 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching radiance_kernel()!\n", cudaStatus);
-		goto Error;
+		cudaFree(dev_c); return cudaStatus;
 	}
 
 	// Copy output vector from GPU buffer to host memory.
@@ -429,11 +436,9 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaMemcpy failed!");
-		goto Error;
+		cudaFree(dev_c); return cudaStatus;
 	}
 
-Error:
-	cudaFree(dev_c);
 
 	return cudaStatus;
 }
@@ -441,7 +446,7 @@ Error:
 void draw(Vec *c, int w, int h)
 {
 	FILE *f;
-	fopen_s(&f, "image.ppm", "w");
+	f = fopen("image.ppm", "w");
 	fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
 	for (int i = 0; i < w*h; i++)
 		fprintf(f, "%d %d %d ", (int)(c[i].x * 255.0), (int)(c[i].y * 255.0), (int)(c[i].z * 255.0));
