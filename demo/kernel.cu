@@ -6,7 +6,7 @@
 #include <curand_kernel.h>
 
 //cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
-#define SAMPLE 1000
+#define SAMPLE 50
 #ifdef M_PI
 #undef M_PI
 #endif
@@ -20,7 +20,7 @@
 //__device__ double curand_uniform_double(curandStateXORWOW_t*);
 
 // helper functions
-__device__ double clamp(double x)
+__device__ __host__ double clamp(double x)
 {
 	return x < 0.0 ? 0.0 : x > 1.0 ? 1.0 : x;
 }
@@ -109,9 +109,6 @@ struct Sphere
 	double rad;       // radius
 	Vec p, e, c;      // position, emission, color
 	EReflType refl;      // reflection type (DIFFuse, SPECular, REFRactive)
-	/* Sphere(double rad_, Vec p_, Vec e_, Vec c_, EReflType refl_) : */
-	/*     rad(rad_), p(p_), e(e_), c(c_), refl(refl_) */
-	/* {} */
 };
 
 // Intersection Test
@@ -156,9 +153,7 @@ __device__ bool intersect_all(const Ray *r, double *t, int *id, const Sphere *sp
 
 __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Sphere *spheres)
 {
-	/* vec_assign(radiance, 1.0, 1.0, 0.0); */
-	/* return; */
-	Vec prev_f = { 1.0, 1.0, 1.0 };
+	Vec accu_f = { 1.0, 1.0, 1.0 };
 	Ray r = *_r;
 	for (int depth = 0; ; ++depth)
 	{
@@ -194,19 +189,22 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 			//p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
 		}
 
+		Vec current_radiance;
 		if (depth > 5) //R.R.
 		{
 			// assert( frame >= 1 );
-			vec_mul(&prev_f, &prev_f, &obj->e);
-			vec_add(radiance, radiance, &prev_f);
+			vec_mul(&current_radiance, &accu_f, &obj->e);
+			vec_add(radiance, radiance, &current_radiance);
 			break;
 
 			//if (curand_uniform_double(state) < p)
 			//	vec_scale(&f, 1.0 / p);
 			//else
 			//{
-			//	vec_copy(radiance, &obj->e);
-			//	return;
+			//	vec_mul(&prev_f, &prev_f, &obj->e);
+			//	vec_add(radiance, radiance, &prev_f);
+			//	prev_f = f;
+			//	break;
 			//}
 		}
 
@@ -238,10 +236,10 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 				vec_norm(&d);
 			}
 
-			vec_mul(&prev_f, &prev_f, &obj->e);
-			vec_add(radiance, radiance, &prev_f);
+			vec_mul(&current_radiance, &accu_f, &obj->e);
+			vec_add(radiance, radiance, &current_radiance);
 			ray_assign(&r, &x, &d);
-			prev_f = f;
+			vec_mul(&accu_f, &accu_f, &f);
 			continue;
 		}
 		else if (obj->refl == SPEC) // Ideal SPECULAR reflection
@@ -253,10 +251,10 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 				vec_add(&d, &d, &r.d);
 			}
 			
-			vec_mul(&prev_f, &prev_f, &obj->e);
-			vec_add(radiance, radiance, &prev_f);
+			vec_mul(&current_radiance, &accu_f, &obj->e);
+			vec_add(radiance, radiance, &current_radiance);
 			ray_assign(&r, &x, &d);
-			prev_f = f;
+			vec_mul(&accu_f, &accu_f, &f);
 			continue;
 		}
 		else // Ideal dielectric REFRACTION
@@ -282,7 +280,7 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 __global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam)
 {
 	const int w = WIDTH, h = HEIGHT;
-	unsigned int seed = threadIdx.x;
+	unsigned int seed = blockIdx.x * blockDim.x + threadIdx.x;// threadIdx.x;
 	curandState state;
 	curand_init(seed, 0, 0, &state);
 	
@@ -302,7 +300,7 @@ __global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam)
 
 	// 2x2 subpixel
 	double r1, r2, dx, dy;
-	for (int sy = 0, i = y*w + x/*(h - y - 1)*w + x*/; sy < 2; sy++)
+	for (int sy = 0, i = (h - y - 1)*w + x; sy < 2; sy++)
 	{
 		for (int sx = 0; sx < 2; sx++)
 		{
@@ -316,8 +314,8 @@ __global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam)
 
 				d = cx;
 				tmp = cy;
-				vec_scale(&d, ((sx + .5 + dx) / 2 + x) / w - .5);
-				vec_scale(&tmp, ((sy + .5 + dy) / 2 + y) / h - .5);
+				vec_scale(&d, ((sx + .5 + dx) * .5 + x) / w - .5);
+				vec_scale(&tmp, ((sy + .5 + dy) * .5 + y) / h - .5);
 				vec_add(&d, &d, &tmp);
 				vec_add(&d, &d, &cam[0].d);
 
@@ -328,6 +326,7 @@ __global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam)
 
 				ray_assign(&rtmp, &tmp, &d);
 
+				vec_zero(&rad);
 				radiance(&rad, &rtmp, &state, spheres);
 				vec_scale(&rad, 1.0 / SAMPLE);
 				vec_add(&r, &r, &rad);
@@ -353,10 +352,10 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 		{1e5, {50,40.8,-1e5 + 170}, {.0,.0,.0},{.0,.0,.0},DIFF},//Frnt
 		{1e5, {50, 1e5, 81.6},      {.0,.0,.0},{.75,.75,.75},DIFF},//Botm
 		{1e5, {50,-1e5 + 81.6,81.6},{.0,.0,.0},{.75,.75,.75},DIFF},//Top
-		/*
-		 * {16.5,{27,16.5,47},         {.0,.0,.0},{0.999,0.999,0.999}, SPEC},//Mirr
-		 * {16.5,{73,16.5,78},         {.0,.0,.0},{ 0.999,0.999,0.999 }, REFR},//Glas
-		 */
+		
+		{16.5,{27,16.5,47},         {.0,.0,.0},{0.999,0.999,0.999}, SPEC},//Mirr
+		{16.5,{73,16.5,78},         {.0,.0,.0},{ 0.999,0.999,0.999 }, REFR},//Glas
+		 
 		{600, {50,681.6 - .27,81.6},{12,12,12},  {.0,.0,.0}, DIFF} //Lite
 	};
 	Ray cam_h = { {50, 52, 295.6}, {0, -0.042612, -1} };
@@ -368,7 +367,7 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-		cudaFree(dev_c); return cudaStatus;
+		return cudaStatus;
 	}
 
 	// Allocate GPU buffers for three vectors (two input, one output)    .
@@ -376,8 +375,9 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaMalloc failed!");
-		cudaFree(dev_c); return cudaStatus;
+		return cudaStatus;
 	}
+	cudaMemset(dev_c, 0, size * sizeof(Vec));
 	cudaStatus = cudaMalloc((void**)&spheres, 9 * sizeof(Sphere));
 	if (cudaStatus != cudaSuccess)
 	{
@@ -439,7 +439,9 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 		cudaFree(dev_c); return cudaStatus;
 	}
 
-
+	cudaFree(dev_c);
+	cudaFree(spheres);
+	cudaFree(cam);
 	return cudaStatus;
 }
 
@@ -449,7 +451,12 @@ void draw(Vec *c, int w, int h)
 	f = fopen("image.ppm", "w");
 	fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
 	for (int i = 0; i < w*h; i++)
-		fprintf(f, "%d %d %d ", (int)(c[i].x * 255.0), (int)(c[i].y * 255.0), (int)(c[i].z * 255.0));
+	{
+		fprintf(f, "%d %d %d ",
+			(int)(pow(clamp(c[i].x), 1 / 2.2) * 255 + .5),
+				(int)(pow(clamp(c[i].y), 1 / 2.2) * 255 + .5),
+				(int)(pow(clamp(c[i].z), 1 / 2.2) * 255 + .5));
+	}
 }
 
 int main()
