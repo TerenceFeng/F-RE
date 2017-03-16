@@ -7,7 +7,7 @@
 #include <curand_kernel.h>
 
 //cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
-#define SAMPLE 10
+#define SAMPLE 1000
 #ifdef M_PI
 #undef M_PI
 #endif
@@ -19,6 +19,7 @@
 //__device__ double rsqrt(double);
 //__device__ double fmax(double, double);
 //__device__ double curand_uniform_double(curandStateXORWOW_t*);
+
 
 // helper functions
 __device__ __host__ double clamp(double x)
@@ -112,16 +113,20 @@ struct Sphere
 	EReflType refl;      // reflection type (DIFFuse, SPECular, REFRactive)
 };
 
+/* constant spheres */
+__constant__ Sphere spheres[9];
+
+
 // Intersection Test
-__device__ double intersect_sr(const Sphere *s, const Ray *r)
+__device__ double intersect_sr(const int pos, const Ray *r)
 {
 	const double eps = 1e-4;
 	Vec op;
 	double b, det, t;
 
-	vec_sub(&op, &s->p, &r->o);
+	vec_sub(&op, &spheres[pos].p, &r->o);
 	b = vec_dot(&op, &r->d);
-	det = b * b - vec_dot(&op, &op) + s->rad * s->rad;
+	det = b * b - vec_dot(&op, &op) + spheres[pos].rad * spheres[pos].rad;
 	if (det < 0.0)
 	{
 		return 0.0;
@@ -135,7 +140,7 @@ __device__ double intersect_sr(const Sphere *s, const Ray *r)
 		return fmax(t, 0.0);
 	}
 }
-__device__ bool intersect_all(const Ray *r, double *t, int *id, const Sphere *spheres)
+__device__ bool intersect_all(const Ray *r, double *t, int *id /*, const Sphere *spheres*/ )
 {
 	double d, inf;
 
@@ -143,7 +148,7 @@ __device__ bool intersect_all(const Ray *r, double *t, int *id, const Sphere *sp
 
 	for (int i = 9; i--;)
 	{
-		d = intersect_sr(spheres + i, r);
+		d = intersect_sr(i, r);
 		if (d != 0.0 && d < *t)
 		{
 			*t = d; *id = i;
@@ -152,24 +157,24 @@ __device__ bool intersect_all(const Ray *r, double *t, int *id, const Sphere *sp
 	return *t < inf;
 }
 
-__device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Sphere *spheres, Vec *hit)
+__device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, /*Sphere *spheres,*/ Vec *hit)
 {
 	Vec accu_f = { 1.0, 1.0, 1.0 };
 	Ray r = *_r;
 	for (int depth = 0; ; ++depth)
 	{
 		double t; // distance to intersection
-		const Sphere *obj; // the hit object
-		{
+		/*
+		 * const Sphere obj; // the hit object
+		 */
 			int id = 0;
-			if (!intersect_all(&r, &t, &id, spheres))
+			if (!intersect_all(&r, &t, &id /*, spheres */))
 			{
 				// debug
 				vec_assign(hit, 1.0, 0.0, 0.0);
 				break;
 			}
-			obj = spheres + id;
-		}
+		const Sphere &obj = spheres[id];
 
 		Vec x, n, nl, f;
 		//double p;  // max refl
@@ -180,14 +185,14 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 			vec_add(&x, &x, &r.o);
 			// n
 			vec_copy(&n, &x);
-			vec_sub(&n, &n, &obj->p);
+			vec_sub(&n, &n, &obj.p);
 			vec_norm(&n);
 			// nl
 			vec_copy(&nl, &n);
 			if (vec_dot(&n, &r.d) >= 0.0)
 				vec_scale(&nl, -1.0);
 			// f
-			vec_copy(&f, &obj->c);
+			vec_copy(&f, &obj.c);
 			// p
 			//p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
 		}
@@ -196,7 +201,7 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 		if (depth > 5) //R.R.
 		{
 			// assert( frame >= 1 );
-			vec_mul(&current_radiance, &accu_f, &obj->e);
+			vec_mul(&current_radiance, &accu_f, &obj.e);
 			vec_add(radiance, radiance, &current_radiance);
 			break;
 
@@ -211,7 +216,7 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 			//}
 		}
 
-		if (obj->refl == DIFF) // Ideal DIFFUSE reflection
+		if (obj.refl == DIFF) // Ideal DIFFUSE reflection
 		{
 			Vec d;
 			{
@@ -239,13 +244,13 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 				vec_norm(&d);
 			}
 
-			vec_mul(&current_radiance, &accu_f, &obj->e);
+			vec_mul(&current_radiance, &accu_f, &obj.e);
 			vec_add(radiance, radiance, &current_radiance);
 			ray_assign(&r, &x, &d);
 			vec_mul(&accu_f, &accu_f, &f);
 			continue;
 		}
-		else if (obj->refl == SPEC) // Ideal SPECULAR reflection
+		else if (obj.refl == SPEC) // Ideal SPECULAR reflection
 		{
 			Vec d;
 			{
@@ -254,7 +259,7 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 				vec_add(&d, &d, &r.d);
 			}
 
-			vec_mul(&current_radiance, &accu_f, &obj->e);
+			vec_mul(&current_radiance, &accu_f, &obj.e);
 			vec_add(radiance, radiance, &current_radiance);
 			ray_assign(&r, &x, &d);
 			vec_mul(&accu_f, &accu_f, &f);
@@ -280,7 +285,7 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 
 }
 
-__global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam, Vec *hit)
+__global__ void radiance_kernel(Vec *c/*, Sphere *spheres*/, Ray *cam, Vec *hit)
 {
 	const int w = WIDTH, h = HEIGHT;
 	unsigned int seed = clock() + blockIdx.x * blockDim.x + threadIdx.x;// threadIdx.x;
@@ -332,7 +337,7 @@ __global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam, Vec *hit)
 				ray_assign(&rtmp, &tmp, &d);
 
 				vec_zero(&rad);
-				radiance(&rad, &rtmp, &state, spheres, hit + i);
+				radiance(&rad, &rtmp, &state/*, spheres*/, hit + i);
 				vec_scale(&rad, 1.0 / SAMPLE);
 				vec_add(&r, &r, &rad);
 
@@ -347,7 +352,7 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h, Vec *hit)
 {
 	const int size = w * h;
 	Vec *dev_c, *dev_hit;
-	Sphere *spheres;
+	/* Sphere *spheres; */ /* moved to constant memory */
 	Ray *cam;
 
 	Sphere spheres_h[] = {//Scene: radius, position, emission, color, material
@@ -392,12 +397,20 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h, Vec *hit)
 	cudaMemcpy(dev_hit, hit, size * sizeof(Vec), cudaMemcpyHostToDevice);
 
 
-	cudaStatus = cudaMalloc((void**)&spheres, 9 * sizeof(Sphere));
-	if (cudaStatus != cudaSuccess)
-	{
-		fprintf(stderr, "cudaMalloc failed!");
-		cudaFree(dev_c); return cudaStatus;
-	}
+
+/*
+ *     cudaStatus = cudaMalloc((void**)&spheres, 9 * sizeof(Sphere));
+ * 
+ *     if (cudaStatus != cudaSuccess)
+ *     {
+ *         fprintf(stderr, "cudaMalloc failed!");
+ *         cudaFree(dev_c); return cudaStatus;
+ *     }
+ * 
+ */
+	/* copy spheres to constant memory */
+	cudaMemcpyToSymbol(spheres, spheres_h, 9 * sizeof(Sphere));
+
 	cudaStatus = cudaMalloc((void**)&cam, sizeof(Ray));
 	if (cudaStatus != cudaSuccess)
 	{
@@ -405,12 +418,15 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h, Vec *hit)
 		cudaFree(dev_c); return cudaStatus;
 	}
 
-	cudaStatus = cudaMemcpy(spheres, spheres_h, 9 * sizeof(Sphere), cudaMemcpyHostToDevice);
-	if (cudaStatus != cudaSuccess)
-	{
-		fprintf(stderr, "cudaMemcpy failed!");
-		cudaFree(dev_c); return cudaStatus;
-	}
+	// TODO
+	/*
+	 * cudaStatus = cudaMemcpy(spheres, spheres_h, 9 * sizeof(Sphere), cudaMemcpyHostToDevice);
+	 * if (cudaStatus != cudaSuccess)
+	 * {
+	 *     fprintf(stderr, "cudaMemcpy failed!");
+	 *     cudaFree(dev_c); return cudaStatus;
+	 * }
+	 */
 	cudaStatus = cudaMemcpy(cam, &cam_h, sizeof(Ray), cudaMemcpyHostToDevice);
 	if (cudaStatus != cudaSuccess)
 	{
@@ -420,13 +436,10 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h, Vec *hit)
 
 	// Copy input vectors from host memory to GPU buffers.
 
-	// Launch a kernel on the GPU with one thread for each element.
-	/* const int THREADS_PER_BLOCK = 16; */
+	// Launch a kernel on the GPU with one thread for each pixel.
 	dim3 blockD(8, 8);
-	/* const int BLOCK_COUNT = ((w + 15) / 4) * ((h + 15) / 4); */
 	dim3 gridD((w + 7) / 8, (h + 7) / 8);
-	/* radiance_kernel<<<THREADS_PER_BLOCK, BLOCK_COUNT>>>(dev_c, spheres, cam); */
-	radiance_kernel<<<gridD, blockD>>>(dev_c, spheres, cam, dev_hit);
+	radiance_kernel<<<gridD, blockD>>>(dev_c,/* spheres,*/ cam, dev_hit);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -461,7 +474,7 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h, Vec *hit)
 
 	cudaFree(dev_c);
 	cudaFree(dev_hit);
-	cudaFree(spheres);
+	/* cudaFree(spheres); */
 	cudaFree(cam);
 	return cudaStatus;
 }
