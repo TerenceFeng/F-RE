@@ -1,12 +1,13 @@
 
-#include <stdio.h>
+#include <cstdio>
+#include <ctime>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <curand_kernel.h>
 
 //cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
-#define SAMPLE 50
+#define SAMPLE 10
 #ifdef M_PI
 #undef M_PI
 #endif
@@ -34,7 +35,7 @@ __device__ void vec_zero(Vec *v)
 {
 	v->x = v->y = v->z = 0.0;
 }
-__device__ void vec_assign(Vec *v, double x, double y, double z)
+__device__ __host__ void vec_assign(Vec *v, double x, double y, double z)
 {
 	v->x = x;
 	v->y = y;
@@ -151,7 +152,7 @@ __device__ bool intersect_all(const Ray *r, double *t, int *id, const Sphere *sp
 	return *t < inf;
 }
 
-__device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Sphere *spheres)
+__device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Sphere *spheres, Vec *hit)
 {
 	Vec accu_f = { 1.0, 1.0, 1.0 };
 	Ray r = *_r;
@@ -163,6 +164,8 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 			int id = 0;
 			if (!intersect_all(&r, &t, &id, spheres))
 			{
+				// debug
+				vec_assign(hit, 1.0, 0.0, 0.0);
 				break;
 			}
 			obj = spheres + id;
@@ -180,9 +183,9 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 			vec_sub(&n, &n, &obj->p);
 			vec_norm(&n);
 			// nl
-			if (vec_dot(&n, &r.d) >= 0.0)
-				vec_scale(&n, -1.0);
 			vec_copy(&nl, &n);
+			if (vec_dot(&n, &r.d) >= 0.0)
+				vec_scale(&nl, -1.0);
 			// f
 			vec_copy(&f, &obj->c);
 			// p
@@ -222,10 +225,10 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 				vec_zero(&u);
 				if (fabs(w.x) > 0.1) u.y = 1.0;
 				else u.x = 1.0;
+				//vec_cross(&u, &u, &w);
 				vec_norm(&u);
 				// v
-				vec_copy(&v, &w);
-				vec_cross(&v, &v, &u);
+				vec_cross(&v, &w, &u);
 				// d
 				vec_scale(&u, cos(r1) * r2s);
 				vec_scale(&v, sin(r1) * r2s);
@@ -250,7 +253,7 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 				vec_scale(&d, -2.0 * vec_dot(&n, &r.d));
 				vec_add(&d, &d, &r.d);
 			}
-			
+
 			vec_mul(&current_radiance, &accu_f, &obj->e);
 			vec_add(radiance, radiance, &current_radiance);
 			ray_assign(&r, &x, &d);
@@ -274,16 +277,16 @@ __device__ void radiance(Vec *radiance, const Ray *_r, curandState *state, Spher
 			//					  radiance(reflRay, depth, state, spheres)*Re + radiance(Ray(x, tdir), depth, state, spheres)*Tr);
 		}
 	}
-	
+
 }
 
-__global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam)
+__global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam, Vec *hit)
 {
 	const int w = WIDTH, h = HEIGHT;
-	unsigned int seed = blockIdx.x * blockDim.x + threadIdx.x;// threadIdx.x;
+	unsigned int seed = clock() + blockIdx.x * blockDim.x + threadIdx.x;// threadIdx.x;
 	curandState state;
 	curand_init(seed, 0, 0, &state);
-	
+
 	////blockIdx, blockDim, warpSize
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -297,6 +300,8 @@ __global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam)
 	vec_cross(&cy, &cx, &cam[0].d);
 	vec_norm(&cy);
 	vec_scale(&cy, 0.5135);
+
+	vec_assign(hit + (h - y - 1)*w + x, 0.5, 0.5, 0.5);
 
 	// 2x2 subpixel
 	double r1, r2, dx, dy;
@@ -327,7 +332,7 @@ __global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam)
 				ray_assign(&rtmp, &tmp, &d);
 
 				vec_zero(&rad);
-				radiance(&rad, &rtmp, &state, spheres);
+				radiance(&rad, &rtmp, &state, spheres, hit + i);
 				vec_scale(&rad, 1.0 / SAMPLE);
 				vec_add(&r, &r, &rad);
 
@@ -338,10 +343,10 @@ __global__ void radiance_kernel(Vec *c, Sphere *spheres, Ray *cam)
 	}
 }
 
-__host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
+__host__ cudaError_t PathTracing(Vec *c, const int w, const int h, Vec *hit)
 {
 	const int size = w * h;
-	Vec *dev_c;
+	Vec *dev_c, *dev_hit;
 	Sphere *spheres;
 	Ray *cam;
 
@@ -352,10 +357,10 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 		{1e5, {50,40.8,-1e5 + 170}, {.0,.0,.0},{.0,.0,.0},DIFF},//Frnt
 		{1e5, {50, 1e5, 81.6},      {.0,.0,.0},{.75,.75,.75},DIFF},//Botm
 		{1e5, {50,-1e5 + 81.6,81.6},{.0,.0,.0},{.75,.75,.75},DIFF},//Top
-		
+
 		{16.5,{27,16.5,47},         {.0,.0,.0},{0.999,0.999,0.999}, SPEC},//Mirr
-		{16.5,{73,16.5,78},         {.0,.0,.0},{ 0.999,0.999,0.999 }, REFR},//Glas
-		 
+		{16.5,{73,16.5,78},         {.0,.0,.0},{ 0.999,0.999,0.999 }, SPEC},//Glas
+
 		{600, {50,681.6 - .27,81.6},{12,12,12},  {.0,.0,.0}, DIFF} //Lite
 	};
 	Ray cam_h = { {50, 52, 295.6}, {0, -0.042612, -1} };
@@ -378,6 +383,15 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 		return cudaStatus;
 	}
 	cudaMemset(dev_c, 0, size * sizeof(Vec));
+	cudaStatus = cudaMalloc((void**)&dev_hit, size * sizeof(Vec));
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaMalloc failed!");
+		return cudaStatus;
+	}
+	cudaMemcpy(dev_hit, hit, size * sizeof(Vec), cudaMemcpyHostToDevice);
+
+
 	cudaStatus = cudaMalloc((void**)&spheres, 9 * sizeof(Sphere));
 	if (cudaStatus != cudaSuccess)
 	{
@@ -410,9 +424,9 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 	/* const int THREADS_PER_BLOCK = 16; */
 	dim3 blockD(8, 8);
 	/* const int BLOCK_COUNT = ((w + 15) / 4) * ((h + 15) / 4); */
-	dim3 gridD((w + 15) / 8, (h + 15) / 8);
+	dim3 gridD((w + 7) / 8, (h + 7) / 8);
 	/* radiance_kernel<<<THREADS_PER_BLOCK, BLOCK_COUNT>>>(dev_c, spheres, cam); */
-	radiance_kernel<<<gridD, blockD>>>(dev_c, spheres, cam);
+	radiance_kernel<<<gridD, blockD>>>(dev_c, spheres, cam, dev_hit);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -438,17 +452,24 @@ __host__ cudaError_t PathTracing(Vec *c, const int w, const int h)
 		fprintf(stderr, "cudaMemcpy failed!");
 		cudaFree(dev_c); return cudaStatus;
 	}
+	cudaStatus = cudaMemcpy(hit, dev_hit, size * sizeof(Vec), cudaMemcpyDeviceToHost);
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaMemcpy failed!");
+		return cudaStatus;
+	}
 
 	cudaFree(dev_c);
+	cudaFree(dev_hit);
 	cudaFree(spheres);
 	cudaFree(cam);
 	return cudaStatus;
 }
 
-void draw(Vec *c, int w, int h)
+void draw(Vec *c, int w, int h, const char *file)
 {
 	FILE *f;
-	f = fopen("image.ppm", "w");
+	f = fopen(file, "w");
 	fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
 	for (int i = 0; i < w*h; i++)
 	{
@@ -463,8 +484,11 @@ int main()
 {
 	const int w = WIDTH, h = HEIGHT;
 	Vec *c = new Vec[w * h];
+	Vec *hit = new Vec[w * h];
+	for (int i = 0; i < w * h; ++i) vec_assign(hit + i, 1.0, 1.0, 0.0);
+
 	// Add vectors in parallel.
-	cudaError_t cudaStatus = PathTracing(c, w, h);
+	cudaError_t cudaStatus = PathTracing(c, w, h, hit);
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "PathTracing() failed!");
@@ -480,7 +504,8 @@ int main()
 		return 1;
 	}
 
-	draw(c, w, h);
+	draw(c, w, h, "image.ppm");
+	draw(hit, w, h, "hit.ppm");
 	delete[] c;
 
 	return 0;
