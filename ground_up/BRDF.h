@@ -55,6 +55,25 @@ private:
 	RGBColor cd;
 };
 
+class GlossySpecular: public BRDF
+{
+public:
+	GlossySpecular(void);
+	GlossySpecular(float ks_, float e_, RGBColor cd_);
+	GlossySpecular(const Lambertian& g_);
+	virtual RGBColor f(const ShadeRec&, const Vector3D&, const Vector3D&) const;
+	virtual RGBColor rho(const ShadeRec&, const Vector3D&) const;
+	inline RGBColor get_color() { return cd; }
+
+	void set_ks(const float ks_);
+	void set_e(const float e_);
+	void set_cd(const RGBColor& cd_);
+
+private:
+	float ks;
+	float e;
+	RGBColor cd;
+};
 
 #endif // _BRDF_H
 

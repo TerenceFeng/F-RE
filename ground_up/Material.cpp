@@ -88,3 +88,53 @@ Matte::shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*> lig
 
 	return L;
 }
+
+/* NOTE: Phong */
+Phong::Phong(void):
+	ambient_brdf(new Lambertian),
+	diffuse_brdf(new Lambertian),
+	specular_brdf(new GlossySpecular)
+{}
+void
+Phong::set_ka(const float ka_)
+{ ambient_brdf->set_kd(ka_); }
+void
+Phong::set_kd(const float kd_)
+{ diffuse_brdf->set_kd(kd_); }
+void
+Phong::set_ks(const float ks_)
+{ specular_brdf->set_ks(ks_); }
+void
+Phong::set_es(const float es_)
+{ specular_brdf->set_e(es_); }
+void
+Phong::set_cd(const RGBColor cd_)
+{
+	ambient_brdf->set_cd(cd_);
+	diffuse_brdf->set_cd(cd_);
+	specular_brdf->set_cd(cd_);
+}
+
+RGBColor
+Phong::shade(ShadeRec& sr, const Ambient *amb_ptr, const std::vector<Light*> light_ptrs) const
+{
+	Vector3D wo = -sr.ray.d;
+	wo.normalize();
+	RGBColor L = ambient_brdf->rho(sr, wo) * amb_ptr->L(sr);
+	int num_of_lights = light_ptrs.size();
+
+	for (int i = 0; i < num_of_lights; i++)
+	{
+		Vector3D wi = light_ptrs[i]->get_direction(sr);
+		wi.normalize();
+		float ndotwi = sr.normal * wi;
+
+		if (ndotwi > 0.0f)
+			L += (diffuse_brdf->f(sr, wo, wi)
+				  + specular_brdf->f(sr, wo, wi))
+				 * light_ptrs[i]->L(sr)
+				 * ndotwi;
+	}
+
+	return L;
+}

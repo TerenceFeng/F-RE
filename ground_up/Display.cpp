@@ -43,7 +43,7 @@ Display::clamp_to_color(const RGBColor& raw_color) const
 	return c;
 }
 
-Display::Display(): x(0), y(0), maxval(255) {}
+Display::Display(): x(200), y(200), maxval(255) {}
 Display::Display(int x_, int y_): x(x_), y(y_), maxval(255) {
 	pixels = vector<vector<unsigned char>>(x_);
 }

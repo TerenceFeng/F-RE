@@ -45,19 +45,13 @@ public:
 
 	virtual Matte& operator = (const Matte& rhs);
 
-	void
-		set_ka(const float ka_);
-	inline float
-		get_ka() const { return ambient_brdf->get_kd(); }
-	void
-		set_kd(const float kd_);
-	inline float
-		get_kd() const { return diffuse_brdf->get_kd(); }
-	void
-		set_cd(const RGBColor& cd_);
+	void set_ka(const float ka_);
+	inline float get_ka() const { return ambient_brdf->get_kd(); }
+	void set_kd(const float kd_);
+	inline float get_kd() const { return diffuse_brdf->get_kd(); }
+	void set_cd(const RGBColor& cd_);
 	/*
-	 * virtual RGBColor
-	 *     shade(ShadeRec& sr);
+	 * virtual RGBColor shade(ShadeRec& sr);
 	 */
 
 	virtual RGBColor
@@ -66,6 +60,24 @@ public:
 private:
 	Lambertian *ambient_brdf;
 	Lambertian *diffuse_brdf;
+	RGBColor cd;
+};
+
+class Phong: public Material
+{
+public:
+	Phong(void);
+	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*> light_) const;
+
+	void set_ka(const float ka_);
+	void set_kd(const float kd_);
+	void set_ks(const float ks_);
+	void set_es(const float es_);
+	void set_cd(const RGBColor cd_);
+private:
+	Lambertian *ambient_brdf;
+	Lambertian *diffuse_brdf;
+	GlossySpecular *specular_brdf;
 	RGBColor cd;
 };
 

@@ -49,6 +49,14 @@ public:
 			return (*this);
 		}
 
+	inline RGBColor
+		operator + (const RGBColor& color)
+		{
+			return RGBColor(r + color.r,
+							g + color.g,
+							b + color.b);
+		}
+
 	/*
 	 * inline friend RGBColor
 	 *     operator * (const RGBColor& color, const float k) {
