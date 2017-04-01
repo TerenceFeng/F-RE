@@ -25,10 +25,8 @@ private:
 	int maxval;
 	std::vector<std::vector<unsigned char>> pixels;
 
-	RGBColor
-		max_to_one(const RGBColor& c) const;
-	RGBColor
-		clamp_to_color(const RGBColor& raw_color) const;
+	RGBColor max_to_one(const RGBColor& c) const;
+	RGBColor clamp_to_color(const RGBColor& raw_color) const;
 
 public:
 	Display();

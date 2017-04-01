@@ -1,20 +1,12 @@
 
 /* ====================================================
-#   Copyright (C)2017 All rights reserved.
-#
 #   Author        : Terence (Yongxin) Feng
 #   Email         : tyxfeng@gmail.com
 #   File Name     : ShadeRec.cpp
 #   Last Modified : 2017-03-21 20:15
-#   Describe      :
-#
-#   Log           :
-#
 # ====================================================*/
 
 #include "ShadeRec.h"
-#include <iostream>
-using namespace std;
 
 ShadeRec::ShadeRec():
 	hit_an_object(false),
@@ -27,18 +19,6 @@ ShadeRec::ShadeRec():
 	dir()
 {}
 
-
-/*
- * [> Implementation of ShadeRec <]
- * ShadeRec:: ShadeRec(World& wr):
- *     hit_an_object(false),
- *     local_hit_point(),
- *     normal(),
- *     color()
- *     // w(wr)
- * {}
- */
-
 ShadeRec:: ShadeRec(const ShadeRec& sr):
 	hit_an_object(sr.hit_an_object),
 	hit_point(sr.hit_point),
@@ -48,7 +28,6 @@ ShadeRec:: ShadeRec(const ShadeRec& sr):
 	ray(sr.ray),
 	depth(sr.depth),
 	dir(sr.dir)
-	// w(sr.w)
 {}
 
 ShadeRec&

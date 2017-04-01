@@ -6,6 +6,7 @@
 #   File Name     : Material.cpp
 # ====================================================*/
 #include "Material.h"
+#include "GeometricObject.h"
 
 #define INV_PI 0.31831f
 
@@ -71,7 +72,7 @@ Matte::set_cd(const RGBColor& cd_)
 }
 
 RGBColor
-Matte::shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*> light_ptrs) const
+Matte::shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs) const
 {
 	Vector3D wo = -sr.ray.d;
 	RGBColor L = ambient_brdf->rho(sr, wo) * amb_ptr->L(sr);
@@ -84,6 +85,31 @@ Matte::shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*> lig
 
 		if (ndotwi > 0.0f)
 			L += (diffuse_brdf->f(sr, wo, wi) * light_ptrs[i]->L(sr)) * ndotwi;
+	}
+	return L;
+}
+
+RGBColor
+Matte::shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs, const std::vector<GeometricObject*>& obj_ptrs) const
+{
+	Vector3D wo = -sr.ray.d;
+	RGBColor L = ambient_brdf->rho(sr, wo) * amb_ptr->L(sr);
+	int num_of_lights = light_ptrs.size();
+
+	for (int i = 0; i < num_of_lights; i++)
+	{
+		Vector3D wi = light_ptrs[i]->get_direction(sr);
+		float ndotwi = sr.normal * wi;
+
+		if (ndotwi > 0.0f)
+		{
+			bool in_shadow = false;
+			Ray shadow_ray(sr.hit_point, wi);
+			in_shadow = light_ptrs[i]->in_shadow(shadow_ray, obj_ptrs);
+
+			if (!in_shadow)
+				L += (diffuse_brdf->f(sr, wo, wi) * light_ptrs[i]->L(sr)) * ndotwi;
+		}
 	}
 
 	return L;
@@ -116,7 +142,31 @@ Phong::set_cd(const RGBColor cd_)
 }
 
 RGBColor
-Phong::shade(ShadeRec& sr, const Ambient *amb_ptr, const std::vector<Light*> light_ptrs) const
+Phong::shade(ShadeRec& sr, const Ambient *amb_ptr, const std::vector<Light*>& light_ptrs) const
+{
+	Vector3D wo = -sr.ray.d;
+	wo.normalize();
+	RGBColor L = ambient_brdf->rho(sr, wo) * amb_ptr->L(sr);
+	int num_of_lights = light_ptrs.size();
+
+	for (int i = 0; i < num_of_lights; i++)
+	{
+		Vector3D wi = light_ptrs[i]->get_direction(sr);
+		wi.normalize();
+		float ndotwi = sr.normal * wi;
+		if (ndotwi > 0.0f) {
+			L += (diffuse_brdf->f(sr, wo, wi)
+				  + specular_brdf->f(sr, wo, wi))
+				 * light_ptrs[i]->L(sr)
+				 * ndotwi;
+		}
+	}
+
+	return L;
+}
+
+RGBColor
+Phong::shade(ShadeRec& sr, const Ambient *amb_ptr, const std::vector<Light*>& light_ptrs, const std::vector<GeometricObject*>& obj_ptrs) const
 {
 	Vector3D wo = -sr.ray.d;
 	wo.normalize();
@@ -130,10 +180,17 @@ Phong::shade(ShadeRec& sr, const Ambient *amb_ptr, const std::vector<Light*> lig
 		float ndotwi = sr.normal * wi;
 
 		if (ndotwi > 0.0f)
-			L += (diffuse_brdf->f(sr, wo, wi)
-				  + specular_brdf->f(sr, wo, wi))
-				 * light_ptrs[i]->L(sr)
-				 * ndotwi;
+		{
+			bool in_shadow = false;
+			Ray shadowRay(sr.hit_point, wi);
+			in_shadow = light_ptrs[i]->in_shadow(shadowRay, obj_ptrs);
+
+			if (!in_shadow)
+				L += (diffuse_brdf->f(sr, wo, wi)
+					 + specular_brdf->f(sr, wo, wi))
+					* light_ptrs[i]->L(sr)
+					* ndotwi;
+		}
 	}
 
 	return L;

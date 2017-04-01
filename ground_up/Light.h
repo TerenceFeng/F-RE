@@ -12,26 +12,26 @@
 #include "RGBColor.h"
 #include "ShadeRec.h"
 #include "Utilities.h"
+#include <vector>
 
+class GeometricObject;
 class Light
 {
 public:
 	Light(void);
 	virtual ~Light(void);
 
-	inline void
-		set_shadows(bool s) {
-			shadows = s;
-		}
-	inline bool
-		get_shadows() const {
-			return shadows;
-		}
+	inline void set_shadows(bool s) {
+		shadows = s;
+	}
+	inline bool get_shadows() const {
+		return shadows;
+	}
 
-	virtual Vector3D
-		get_direction(ShadeRec& sr) = 0;
-	virtual RGBColor
-		L(ShadeRec& sr) const = 0;
+	virtual Vector3D get_direction(ShadeRec& sr) = 0;
+	virtual RGBColor L(ShadeRec& sr) const = 0;
+	// virtual bool in_shadow(const Ray& ray, const ShadeRec& sr);
+	virtual bool in_shadow(const Ray& ray, const std::vector<GeometricObject*>& obj_ptrs) const = 0;
 
 protected:
 	bool shadows;
@@ -48,6 +48,7 @@ public:
 		get_direction(ShadeRec& sr);
 	virtual RGBColor
 		L(ShadeRec& sr) const;
+	virtual bool in_shadow(const Ray& ray, const std::vector<GeometricObject*>& obj_ptrs) const;
 
 	inline void scale_radiance(const float b) {ls = b;}
 	inline void set_color(const RGBColor& color_) {color = color_;}
@@ -67,6 +68,7 @@ public:
 		get_direction(ShadeRec& sr);
 	virtual RGBColor
 		L(ShadeRec& sr) const;
+	virtual bool in_shadow(const Ray& ray, const std::vector<GeometricObject*>& obj_ptrs) const;
 
 	inline void set_radiance(const float b) {ls = b;}
 	inline void set_location(const Point3D& location_) {location = location_;}

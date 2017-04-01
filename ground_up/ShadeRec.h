@@ -17,7 +17,6 @@
 
 #include "RGBColor.h"
 #include "Utilities.h"
-// class World;
 
 class ShadeRec
 {
@@ -31,10 +30,8 @@ public:
 	int			depth;
 	Vector3D	dir;
 	float t;
-	// World& w;
 
 	ShadeRec();
-	// ShadeRec(World& wr);
 	ShadeRec(const ShadeRec& sr);
 
 	ShadeRec&

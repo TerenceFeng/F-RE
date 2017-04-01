@@ -25,27 +25,17 @@
 class World
 {
 public:
-	ViewPlane vp;
 	RGBColor background_color;
 	Ambient* ambient_ptr;
-	std::vector<GeometricObject*> objects;
+	std::vector<GeometricObject*> obj_ptrs;
 	std::vector<Light *> light_ptrs;
 
 	World(void);
 	~World(void);
 
-	void render_scene() const;
-
-	inline void set_hres(int hres_) {vp.hres = hres_;}
-	inline void set_vres(int vres_) {vp.vres = vres_;}
-	inline void set_ambient_light(Ambient *ambient_ptr_) {
-		ambient_ptr = ambient_ptr_;
-	}
-
 	void add_object(GeometricObject* obj);
 	void add_light(Light* light_ptr);
 
-	void display_pixel(const int row, const int column, const RGBColor& pixel_color) const;
 };
 
 #endif // _WORLD_H

@@ -13,8 +13,6 @@
 # ====================================================*/
 
 #include "World.h"
-#include "Display.h"
-#include "Sphere.h"
 
 #include <fcntl.h>
 #include <errno.h>
@@ -25,22 +23,13 @@
 using namespace std;
 
 World::World(void):
-	vp(ViewPlane()),
 	background_color(black)
-	// ambient_ptr(new Ambient)
-{
-
-	/* default view plane */
-	vp.hres = 200;
-	vp.vres = 200;
-	vp.s = 1.0f;
-
-}
+{}
 
 World::~World(void)
 {
-	for (int i = 0; i < objects.size(); i++) {
-		delete objects[i];
+	for (int i = 0; i < obj_ptrs.size(); i++) {
+		delete obj_ptrs[i];
 	}
 	delete ambient_ptr;
 	for (int i = 0; i < light_ptrs.size(); i++) {
@@ -52,7 +41,7 @@ void
 World::
 add_object(GeometricObject* obj_ptr)
 {
-	objects.push_back(obj_ptr);
+	obj_ptrs.push_back(obj_ptr);
 }
 
 void

@@ -14,25 +14,17 @@
 #include "RGBColor.h"
 #include "ShadeRec.h"
 #include <vector>
-// #include "Lambertian.h"
 
+class GeometricObject;
 class Material
 {
 public:
 
-	// Material(const Material& rhs);
 	virtual ~Material();
 	virtual Material& operator = (const Material& rhs);
-	virtual RGBColor
-		shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*> light_ptrs) const = 0;
+	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs) const = 0;
+	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs, const std::vector<GeometricObject*>& obj_ptrs) const = 0;
 
-/*
- *     virtual RGBColor
- *         area_light_shade(ShadeRec& sr);
- *
- *     virtual RGBColor
- *         path_shade(ShadeRec& sr);
- */
 };
 
 class Matte: public Material
@@ -50,12 +42,9 @@ public:
 	void set_kd(const float kd_);
 	inline float get_kd() const { return diffuse_brdf->get_kd(); }
 	void set_cd(const RGBColor& cd_);
-	/*
-	 * virtual RGBColor shade(ShadeRec& sr);
-	 */
 
-	virtual RGBColor
-		shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*> light_ptrs) const;
+	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs) const;
+	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs, const std::vector<GeometricObject*>& obj_ptrs) const;
 
 private:
 	Lambertian *ambient_brdf;
@@ -67,7 +56,8 @@ class Phong: public Material
 {
 public:
 	Phong(void);
-	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*> light_) const;
+	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_) const;
+	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs, const std::vector<GeometricObject*>& obj_ptrs) const;
 
 	void set_ka(const float ka_);
 	void set_kd(const float kd_);
