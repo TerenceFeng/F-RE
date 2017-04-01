@@ -29,49 +29,42 @@ public:
 
 	Vector3D& operator= (const Vector3D& rhs);
 
-	inline Vector3D
-		 operator* (const float a) const {
-			return Vector3D(x * a, y * a, z * a);
-		}
-	inline Vector3D
-		operator/ (const float a) const {
-			return Vector3D(x / a, y / a, z / a);
-		}
-	inline Vector3D
-		operator+ (const Vector3D& v) const {
-			return Vector3D(x + v.x, y + v.y, z + v.z);
-		}
-	inline Vector3D&
-		operator+= (const Vector3D& v) {
-			this->x += v.x;
-			this->y += v.y;
-			this->z += v.z;
-			return (*this);
-		}
-	inline Vector3D
-		operator- (const Vector3D& v) const {
-			return Vector3D(x - v.x, y - v.y, z - v.z);
-		}
-	inline float
-		operator* (const Vector3D& b) const {
-			return x * b.x + y * b.y + z * b.z;
-		}
-	inline Vector3D
-		operator^ (const Vector3D& v) const {
-			return Vector3D(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x);
-		}
-	inline Vector3D
-	operator-() const {
+	inline Vector3D operator* (const float a) const {
+		return Vector3D(x * a, y * a, z * a);
+	}
+	inline Vector3D operator/ (const float a) const {
+		return Vector3D(x / a, y / a, z / a);
+	}
+	inline Vector3D operator+ (const Vector3D& v) const {
+		return Vector3D(x + v.x, y + v.y, z + v.z);
+	}
+	inline Vector3D& operator+= (const Vector3D& v) {
+		this->x += v.x;
+		this->y += v.y;
+		this->z += v.z;
+		return (*this);
+	}
+	inline Vector3D operator- (const Vector3D& v) const {
+		return Vector3D(x - v.x, y - v.y, z - v.z);
+	}
+	inline float operator* (const Vector3D& b) const {
+		return x * b.x + y * b.y + z * b.z;
+	}
+	inline Vector3D operator^ (const Vector3D& v) const {
+		return Vector3D(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x);
+	}
+	inline Vector3D operator-() const {
 		return Vector3D(-x, -y, -z);
 	}
-	inline float
-		length() {
-			return sqrtf(this->len_squared());
-		}
-	inline float
-		len_squared() {
-			return x * x + y * y + z * z;
-		}
+	inline float length() {
+		return sqrtf(this->len_squared());
+	}
+	inline float len_squared() {
+		return x * x + y * y + z * z;
+	}
+	inline float distance(const Vector3D& v) const {
+		return (x - v.x) * (x - v.x) + (y - v.y) * (y - v.y) + (z - v.z) * (z - v.z);
+	}
 	void normalize();
 	Vector3D& hat();
 };
@@ -89,11 +82,10 @@ public:
 	Ray(const Ray& r);
 	Ray(const Point3D& _o, const Point3D& _d);
 
-	inline Ray&
-		operator= (const Ray& rhs) {
-			o = rhs.o; d = rhs.d;
-			return (*this);
-		}
+	inline Ray& operator= (const Ray& rhs) {
+		o = rhs.o; d = rhs.d;
+		return (*this);
+	}
 
 };
 
