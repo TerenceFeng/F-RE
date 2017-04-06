@@ -22,8 +22,11 @@ public:
 
 	virtual ~Material();
 	virtual Material& operator = (const Material& rhs);
-	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs) const = 0;
-	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs, const std::vector<GeometricObject*>& obj_ptrs) const = 0;
+
+	virtual RGBColor shade(ShadeRec&) const = 0;
+	virtual RGBColor area_light_shade(ShadeRec&) const = 0;
+
+	virtual RGBColor get_Le(ShadeRec& sr) const;
 
 };
 
@@ -31,20 +34,20 @@ class Matte: public Material
 {
 public:
 	Matte(void);
-	Matte(const Matte& rhs);
-	Matte(const float ka_, const float kd_, const RGBColor& cd_);
+	Matte(const Matte&);
+	Matte(const float, const float, const RGBColor&);
 	~Matte(void);
 
 	virtual Matte& operator = (const Matte& rhs);
 
-	void set_ka(const float ka_);
+	void set_ka(const float);
 	inline float get_ka() const { return ambient_brdf->get_kd(); }
-	void set_kd(const float kd_);
+	void set_kd(const float);
 	inline float get_kd() const { return diffuse_brdf->get_kd(); }
-	void set_cd(const RGBColor& cd_);
+	void set_cd(const RGBColor&);
 
-	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs) const;
-	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs, const std::vector<GeometricObject*>& obj_ptrs) const;
+	virtual RGBColor shade(ShadeRec&) const;
+	virtual RGBColor area_light_shade(ShadeRec&) const;
 
 private:
 	Lambertian *ambient_brdf;
@@ -56,8 +59,8 @@ class Phong: public Material
 {
 public:
 	Phong(void);
-	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_) const;
-	virtual RGBColor shade(ShadeRec& sr, const Ambient* amb_ptr, const std::vector<Light*>& light_ptrs, const std::vector<GeometricObject*>& obj_ptrs) const;
+	virtual RGBColor shade(ShadeRec& sr) const;
+	virtual RGBColor area_light_shade(ShadeRec& sr) const;
 
 	void set_ka(const float ka_);
 	void set_kd(const float kd_);
@@ -69,6 +72,20 @@ private:
 	Lambertian *diffuse_brdf;
 	GlossySpecular *specular_brdf;
 	RGBColor cd;
+};
+
+class Emissive: public Material
+{
+public:
+	Emissive(void);
+	Emissive(int, const RGBColor&);
+
+	virtual RGBColor shade(ShadeRec&) const;
+	virtual RGBColor area_light_shade(ShadeRec& sr) const;
+	virtual RGBColor get_Le(ShadeRec& sr) const;
+private:
+	float ls; /* radiance scaling factor */
+	RGBColor ce; /* color */
 };
 
 #endif

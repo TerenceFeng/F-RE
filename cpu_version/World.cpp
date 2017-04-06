@@ -31,7 +31,8 @@ World::~World(void)
 	for (int i = 0; i < obj_ptrs.size(); i++) {
 		delete obj_ptrs[i];
 	}
-	delete ambient_ptr;
+	/* if (ambient_ptr) */
+	   //  delete ambient_ptr;
 	for (int i = 0; i < light_ptrs.size(); i++) {
 		delete light_ptrs[i];
 	}

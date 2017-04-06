@@ -11,7 +11,9 @@
 
 #include "RGBColor.h"
 #include "Utilities.h"
-#include "World.h"
+
+class World;
+extern World world;
 
 class Camera
 {
@@ -22,8 +24,8 @@ public:
 	void compute_uvw(void);
 	void set_viewplane(int h_, int w_, float s_);
 
-	virtual void render_scene(const World&) = 0;
-	virtual RGBColor trace_ray(const Ray&, const World&) = 0;
+	virtual void render_scene() = 0;
+	virtual RGBColor trace_ray(const Ray&) = 0;
 
 protected:
 	Point3D position;
@@ -44,8 +46,8 @@ public:
 	PinHole(Point3D position_, Point3D lookat_, float exp_time_, float d_, float zoom);
 	Vector3D ray_direction(const float& xv, const float& yv) const;
 
-	virtual void render_scene(const World&);
-	virtual RGBColor trace_ray(const Ray&, const World&);
+	virtual void render_scene();
+	virtual RGBColor trace_ray(const Ray&);
 private:
 	float d; /* view plane distance */
 	float zoom;

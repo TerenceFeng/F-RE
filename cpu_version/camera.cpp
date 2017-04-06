@@ -8,12 +8,16 @@
 
 #include "Display.h"
 #include "camera.h"
+#include "sampler.h"
+#include "World.h"
 #include <cfloat>
+
+Vector3D UP(-1, -1, 0);
 
 Camera::Camera():
 	position(),
 	lookat(),
-	up(0, 1, 0),
+	up(UP),
 	exposure_time(0.01)
 {
 	compute_uvw();
@@ -22,7 +26,7 @@ Camera::Camera():
 Camera::Camera(Point3D position_, Point3D lookat_):
 	position(position_),
 	lookat(lookat_),
-	up(0, 1, 0),
+	up(UP),
 	exposure_time(0.01)
 {
 	compute_uvw();
@@ -31,7 +35,7 @@ Camera::Camera(Point3D position_, Point3D lookat_):
 Camera::Camera(Point3D position_, Point3D lookat_, float exp_time_):
 	position(position_),
 	lookat(lookat_),
-	up(0, 1, 0),
+	up(UP),
 	exposure_time(exp_time_)
 {
 	compute_uvw();
@@ -77,38 +81,43 @@ PinHole::ray_direction(const float& xv, const float& yv) const
 }
 
 void
-PinHole::render_scene(const World& w)
+PinHole::render_scene()
 {
 	RGBColor L;
 	Ray ray;
 	int depth = 0;
 	s /= zoom;
-	/* TODO: sample point in [0, 1] x [0, 1] */
-	/* sample point on a pixel */
 
 	ray.o = position;
 	float x, y;
 	Display printer(height, width);
+	// Jittered sampler(100);
+	NRooks sampler(100);
+	// Hammersley sampler(100);
+	Point2D sp;
 
 	for (int r = 0; r < height; r++)
-	{
 		for (int c = 0; c < width; c++)
 		{
 			L = BLACK;
-			x = s * (c - 0.5f * (width - 1.0f));
-			y = s * (r - 0.5f * (height - 1.0f));
-			ray.d = ray_direction(x, y);
-			L += trace_ray(ray, w);
+			for (int j = 0; j < sampler.num_samples; j++)
+			{
+				sp = sampler.sample_unit_square();
+				x = s * (c - 0.5f * width + sp.x);
+				y = s * (r - 0.5f * height + sp.y);
+				ray.d = ray_direction(x, y);
+				L += trace_ray(ray);
+			}
+			L /= sampler.num_samples;
 			L = L * exposure_time;
 			printer.add_pixel(r, c, L);
 		}
-	}
 
 	printer.display();
 }
 
 RGBColor
-PinHole::trace_ray(const Ray& ray, const World& world)
+PinHole::trace_ray(const Ray& ray)
 {
 	ShadeRec sr;
 	sr.color = BLACK;
@@ -138,7 +147,7 @@ PinHole::trace_ray(const Ray& ray, const World& world)
 		sr.normal = normal;
 		sr.local_hit_point = local_hit_point;
 		sr.ray = ray;
-		sr.color = nearest_object->get_reflected_color(sr, world.ambient_ptr, world.light_ptrs, world.obj_ptrs);
+		sr.color = nearest_object->get_reflected_color(sr);
 	}
 
 	return sr.color;

@@ -1,15 +1,7 @@
-
 /* ====================================================
-#   Copyright (C)2017 All rights reserved.
-#
 #   Author        : Terence (Yongxin) Feng
 #   Email         : tyxfeng@gmail.com
 #   File Name     : Object.h
-#   Last Modified : 2017-03-21 20:18
-#   Describe      :
-#
-#   Log           :
-#
 # ====================================================*/
 
 #ifndef  _GEOMETRICOBJECT_H
@@ -21,15 +13,17 @@
 #include "ShadeRec.h"
 #include "Material.h"
 
+class Sampler;
+
 class GeometricObject
 {
 protected:
-	Material *m_ptr;
 	const float eps = 1e-4;
-	/* reflection coefficient */
-	GeometricObject& operator= (const GeometricObject& rhs);
+	GeometricObject& operator = (const GeometricObject& rhs);
 
 public:
+	Material *material_ptr;
+
 	GeometricObject(void);
 	GeometricObject(Material *m_ptr_);
 	GeometricObject(const GeometricObject& go);
@@ -37,12 +31,14 @@ public:
 
 	virtual bool hit(const Ray& r, float& tmin, ShadeRec& sr) const = 0;
 
-	inline void set_material(Material *m_ptr_) {m_ptr = m_ptr_;}
-	inline Material * get_material() {return m_ptr;}
+	inline void set_material(Material *m_ptr_) {material_ptr= m_ptr_;}
 
-	RGBColor get_reflected_color(ShadeRec&, const Ambient*, const std::vector<Light*>) const;
-	RGBColor get_reflected_color(ShadeRec&, const Ambient*, const std::vector<Light*>, const std::vector<GeometricObject*>) const;
+	RGBColor get_reflected_color(ShadeRec&) const;
 	virtual bool shadow_hit(const Ray& ray, float& tmin) const = 0;
+
+	virtual Point3D sample(void);
+	virtual float pdf(ShadeRec&);
+	virtual Normal get_normal(const Point3D&);
 
 };
 
@@ -81,8 +77,25 @@ private:
 	const float eps = 1e-2;
 };
 
-
+class Rectangle: public GeometricObject
+{
+public:
+	Rectangle();
+	Rectangle(const Point3D&, const Vector3D&, const Vector3D&);
+	void set_sampler(Sampler *);
+	virtual Point3D sample(void);
+	virtual float pdf(ShadeRec& sr);
+	virtual Normal get_normal(const Point3D&);
+	bool hit(const Ray&, float&, ShadeRec&) const;
+	bool shadow_hit(const Ray&, float&) const;
+private:
+	Point3D p0;
+	Vector3D a, b;
+	float a_len, b_len;
+	float a_len_2, b_len_2;
+	Normal normal;
+	Sampler *sampler_ptr;
+	float inv_area;
+};
 
 #endif
-
-

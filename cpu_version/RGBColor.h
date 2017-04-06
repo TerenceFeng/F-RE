@@ -41,6 +41,24 @@ public:
 		}
 
 	inline RGBColor&
+		operator *= (const float k)
+		{
+			r *= k;
+			g *= k;
+			b *= k;
+			return (*this);
+		}
+
+	inline RGBColor&
+		operator /= (const float k)
+		{
+			r /= k;
+			g /= k;
+			b /= k;
+			return (*this);
+		}
+
+	inline RGBColor&
 		operator += (const RGBColor& color)
 		{
 			r += color.r;
@@ -55,6 +73,14 @@ public:
 			return RGBColor(r + color.r,
 							g + color.g,
 							b + color.b);
+		}
+
+	inline RGBColor
+		operator / (const float f)
+		{
+			return RGBColor(r / f,
+							g / f,
+							b / f);
 		}
 
 	/*

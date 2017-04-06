@@ -6,8 +6,20 @@
 # ====================================================*/
 
 #include "Utilities.h"
-#include <iostream>
-using namespace std;
+
+/* NOTE: Implementation of Point2D */
+Vector2D::Vector2D(): x(0.0f), y(0.0f) {}
+Vector2D::Vector2D(float a): x(a), y(a) {}
+Vector2D::Vector2D(float x_, float y_): x(x_), y(y_) {}
+Vector2D::Vector2D(const Vector2D& v): x(v.x), y(v.y) {}
+
+Vector2D&
+Vector2D::operator = (const Vector2D& rhs)
+{
+	x = rhs.x;
+	y = rhs.y;
+	return (*this);
+}
 
 /* Implementation of Vector3D */
 Vector3D::Vector3D(): x(0.0), y(0.0), z(0.0) {}
@@ -16,7 +28,7 @@ Vector3D::Vector3D(float _x, float _y, float _z): x(_x), y(_y), z(_z) {}
 Vector3D::Vector3D(const Vector3D& v): x(v.x), y(v.y), z(v.z) {}
 
 Vector3D&
-Vector3D:: operator= (const Vector3D& rhs) {
+Vector3D::operator= (const Vector3D& rhs) {
 	x = rhs.x;
 	y = rhs.y;
 	z = rhs.z;
@@ -33,7 +45,11 @@ Vector3D::hat() {
 	this->normalize();
 	return (*this);
 }
-
+float
+Vector3D::distance(const Vector3D& v) const
+{
+	return sqrtf(distance_sqr(v));
+}
 
 /* Implementation of Ray */
 Ray:: Ray(): d(Vector3D()), o(Point3D()) {}

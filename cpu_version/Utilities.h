@@ -17,6 +17,23 @@
 
 #include <cmath>
 
+class Vector2D
+{
+public:
+	float x, y;
+
+	Vector2D();
+	Vector2D(float a);
+	Vector2D(float x_, float y_);
+	Vector2D(const Vector2D& v);
+
+	Vector2D& operator = (const Vector2D& rhs);
+
+	inline Vector2D operator * (const float a) const {
+		return Vector2D(x * a, y * a);
+	}
+};
+
 class Vector3D
 {
 public:
@@ -62,13 +79,15 @@ public:
 	inline float len_squared() {
 		return x * x + y * y + z * z;
 	}
-	inline float distance(const Vector3D& v) const {
+	float distance(const Vector3D& v) const;
+	inline float distance_sqr(const Vector3D& v) const {
 		return (x - v.x) * (x - v.x) + (y - v.y) * (y - v.y) + (z - v.z) * (z - v.z);
 	}
 	void normalize();
 	Vector3D& hat();
 };
 
+typedef Vector2D Point2D;
 typedef Vector3D Point3D;
 typedef Vector3D Normal;
 
