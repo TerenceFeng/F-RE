@@ -13,6 +13,7 @@ ShadeRec::ShadeRec():
 	hit_point(),
 	local_hit_point(),
 	normal(),
+	reflected_dir(),
 	color(),
 	ray(),
 	depth(0),
@@ -24,6 +25,7 @@ ShadeRec:: ShadeRec(const ShadeRec& sr):
 	hit_point(sr.hit_point),
 	local_hit_point(sr.local_hit_point),
 	normal(sr.normal),
+	reflected_dir(sr.reflected_dir),
 	color(sr.color),
 	ray(sr.ray),
 	depth(sr.depth),
@@ -36,6 +38,7 @@ ShadeRec:: operator= (const ShadeRec& rhs) {
 	hit_point = rhs.hit_point;
 	local_hit_point = rhs.local_hit_point;
 	normal = rhs.normal;
+	reflected_dir = rhs.reflected_dir;
 	color = rhs.color;
 	ray = rhs.ray;
 	depth = rhs.depth;

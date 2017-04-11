@@ -25,6 +25,7 @@ public:
 	Point3D		hit_point;
 	Point3D		local_hit_point;
 	Normal		normal;
+	Normal		reflected_dir;
 	RGBColor	color;
 	Ray			ray;
 	int			depth;

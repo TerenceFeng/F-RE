@@ -26,7 +26,7 @@ class World
 {
 public:
 	RGBColor background_color;
-	Ambient* ambient_ptr;
+	AmbientOccluder* ambient_ptr;
 	std::vector<GeometricObject*> obj_ptrs;
 	std::vector<Light*> light_ptrs;
 

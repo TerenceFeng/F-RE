@@ -13,15 +13,16 @@
 #include "ShadeRec.h"
 #include "Utilities.h"
 
+class Sampler;
+
 class BRDF
 {
 public:
-	virtual RGBColor
-		f(const ShadeRec& sr, const Vector3D& wi, const Vector3D& wo) const = 0;
-
-	virtual RGBColor
-		rho(const ShadeRec& sr, const Vector3D& wo) const = 0;
-
+	virtual RGBColor f(const ShadeRec& sr, const Vector3D& wi, const Vector3D& wo) const = 0;
+	virtual RGBColor rho(const ShadeRec& sr, const Vector3D& wo) const = 0;
+	void set_sampler(Sampler*);
+protected:
+	Sampler* sampler_ptr;
 };
 
 class Lambertian: public BRDF
@@ -30,20 +31,10 @@ public:
 	Lambertian();
 	Lambertian(float kd_, RGBColor cd_);
 	Lambertian(const Lambertian& l);
-	virtual RGBColor
-		f(const ShadeRec& sr, const Vector3D& wi, const Vector3D& wo) const;
-	virtual RGBColor
-		rho(const ShadeRec& sr, const Vector3D& wo) const;
-	inline RGBColor
-		get_color() const { return cd; }
-	/*
-	 * inline Lambertian&
-	 *     operator = (const Lambertian& rhs) {
-	 *         kd = rhs.kd;
-	 *         cd = rhs.kd;
-	 *         return (*this);
-	 *     }
-	 */
+	virtual RGBColor f(const ShadeRec&, const Vector3D& wo, const Vector3D& wi) const;
+	RGBColor sample_f(const ShadeRec&, const Vector3D& wo, Vector3D& wi, float& pdf) const;
+	virtual RGBColor rho(const ShadeRec& sr, const Vector3D& wo) const;
+	inline RGBColor get_color() const { return cd; }
 	inline void set_kd(const float& kd_) { kd = kd_; }
 	inline float get_kd() const { return kd; }
 	inline void set_cd(const RGBColor& cd_) { cd = cd_; }

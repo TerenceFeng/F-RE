@@ -13,6 +13,7 @@
 #include "Utilities.h"
 
 class World;
+class ShadeRec;
 extern World world;
 
 class Camera
@@ -23,9 +24,12 @@ public:
 	Camera(Point3D, Point3D, float);
 	void compute_uvw(void);
 	void set_viewplane(int h_, int w_, float s_);
+	void set_up(int a, int b, int c);
 
 	virtual void render_scene() = 0;
+	virtual RGBColor cast_ray(const Ray&) = 0;
 	virtual RGBColor trace_ray(const Ray&) = 0;
+	virtual RGBColor trace_path(const Ray&, int) = 0;
 
 protected:
 	Point3D position;
@@ -47,10 +51,13 @@ public:
 	Vector3D ray_direction(const float& xv, const float& yv) const;
 
 	virtual void render_scene();
-	virtual RGBColor trace_ray(const Ray&);
 private:
 	float d; /* view plane distance */
 	float zoom;
+	virtual RGBColor cast_ray(const Ray&);
+	virtual RGBColor trace_ray(const Ray&);
+	virtual RGBColor trace_path(const Ray&, int);
+	RGBColor trace_path(const Ray&, ShadeRec&);
 };
 
 #endif

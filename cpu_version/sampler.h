@@ -19,13 +19,20 @@ public:
 
 	Sampler();
 	Sampler(int num_samples_);
+	virtual ~Sampler();
 	virtual void generate_samples(void) = 0;
 	void setup_shuffled_indices(void);
+	void map_samples_to_unit_disk(void);
+	void map_samples_to_hemisphere(const float);
 	Point2D sample_unit_square(void);
+	Point2D sample_unit_disk(void);
+	Point3D sample_unit_hemisphere(void);
 
 protected:
 	int num_sets;
 	std::vector<Point2D> samples;
+	std::vector<Point2D> samples_disk;
+	std::vector<Point3D> samples_hemisphere;
 	std::vector<int> shuffled_indices;
 	unsigned long count;
 	int jump;

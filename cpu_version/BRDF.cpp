@@ -13,10 +13,19 @@
 # ====================================================*/
 
 #include "BRDF.h"
+#include "Sampler.h"
 #include <cmath>
 #include <cstdio>
 
 #define INV_PI 0.81831
+extern NRooks sampler;
+
+/* NOTE: implementation of BRDF base class */
+void
+BRDF::set_sampler(Sampler* sampler_ptr_)
+{
+	sampler_ptr = sampler_ptr_;
+}
 
 Lambertian::Lambertian(): kd(0.0f), cd(BLACK) {}
 Lambertian::Lambertian(float kd_, RGBColor cd_): kd(kd_), cd(cd_) {}
@@ -25,11 +34,21 @@ Lambertian::Lambertian(const Lambertian& l): kd(l.kd), cd(l.cd) {}
 RGBColor
 Lambertian::f(const ShadeRec& sr, const Vector3D& wo, const Vector3D& wi) const
 {
-	/*
-	 * std::cout << cd.r << " " << cd.g << " " << cd.b << std::endl;
-	 * exit(0);
-	 */
 	return (cd * (kd * INV_PI));
+}
+
+RGBColor
+Lambertian::sample_f(const ShadeRec& sr, const Vector3D& wo, Vector3D& wi, float& pdf) const
+{
+	Vector3D w = sr.normal;
+	Vector3D v = Vector3D(0.0034, 1.0, 0.0071) ^ w;
+	v.normalize();
+	Vector3D u = v ^ w;
+	Point3D sp = sampler.sample_unit_hemisphere();
+	wi = u * sp.x + v * sp.y + v * sp.z;
+	wi.normalize();
+	pdf = sr.normal * wi * INV_PI;
+	return cd * kd * INV_PI;
 }
 
 RGBColor
