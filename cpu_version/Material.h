@@ -25,6 +25,7 @@ public:
 
 	virtual RGBColor shade(ShadeRec&) const = 0;
 	virtual RGBColor area_light_shade(ShadeRec&) const = 0;
+	virtual RGBColor path_shade(ShadeRec&) const = 0;
 
 	virtual RGBColor get_Le(ShadeRec& sr) const;
 
@@ -48,6 +49,7 @@ public:
 
 	virtual RGBColor shade(ShadeRec&) const;
 	virtual RGBColor area_light_shade(ShadeRec&) const;
+	virtual RGBColor path_shade(ShadeRec&) const;
 
 private:
 	Lambertian *ambient_brdf;
@@ -59,8 +61,9 @@ class Phong: public Material
 {
 public:
 	Phong(void);
-	virtual RGBColor shade(ShadeRec& sr) const;
-	virtual RGBColor area_light_shade(ShadeRec& sr) const;
+	virtual RGBColor shade(ShadeRec&) const;
+	virtual RGBColor area_light_shade(ShadeRec&) const;
+	virtual RGBColor path_shade(ShadeRec&) const;
 
 	void set_ka(const float ka_);
 	void set_kd(const float kd_);
@@ -82,6 +85,7 @@ public:
 
 	virtual RGBColor shade(ShadeRec&) const;
 	virtual RGBColor area_light_shade(ShadeRec& sr) const;
+	virtual RGBColor path_shade(ShadeRec& sr) const;
 	virtual RGBColor get_Le(ShadeRec& sr) const;
 private:
 	float ls; /* radiance scaling factor */

@@ -8,6 +8,7 @@
 
 #include "Light.h"
 #include "World.h"
+#include "Sampler.h"
 #include "Material.h"
 #include "GeometricObject.h"
 #include <cfloat>
@@ -52,7 +53,7 @@ Ambient::get_direction(ShadeRec& sr) {
 }
 
 RGBColor
-Ambient::L(ShadeRec& sr) const
+Ambient::L(ShadeRec& sr)
 {
 	return color * ls;
 }
@@ -69,7 +70,7 @@ PointLight::PointLight(void):
 {
 	shadows = true;
 }
-PointLight::PointLight(float ls_, RGBColor color_, Vector3D location_):
+PointLight::PointLight(float ls_, const RGBColor& color_, const Vector3D& location_):
 	Light(),
 	ls(ls_),
 	color(color_),
@@ -77,7 +78,7 @@ PointLight::PointLight(float ls_, RGBColor color_, Vector3D location_):
 {
 	shadows = true;
 }
-PointLight::PointLight(float ls_, RGBColor color_, Vector3D location_, bool shadows_):
+PointLight::PointLight(float ls_, const RGBColor& color_, const Vector3D& location_, bool shadows_):
 	Light(),
 	ls(ls_),
 	color(color_),
@@ -92,7 +93,7 @@ PointLight::get_direction(ShadeRec& sr)
 }
 
 RGBColor
-PointLight::L(ShadeRec& sr) const
+PointLight::L(ShadeRec& sr)
 {
 	return color * ls;
 }
@@ -139,7 +140,6 @@ AreaLight::in_shadow(const Ray& ray) const
 {
 	float t = FLT_MAX;
 	float ts = (sample_point - ray.o) * ray.d;
-
 	for (auto obj_ptr: world.obj_ptrs)
 		if (obj_ptr->shadow_hit(ray, t) && t < ts)
 			return true;
@@ -158,7 +158,7 @@ AreaLight::set_material(Material* material_ptr_)
 }
 
 RGBColor
-AreaLight::L(ShadeRec& sr) const
+AreaLight::L(ShadeRec& sr)
 {
 	float ndotd = -light_normal * wi;
 	if (ndotd > 0.0f)
@@ -179,4 +179,116 @@ float
 AreaLight::pdf(ShadeRec& sr) const
 {
 	return object_ptr->pdf(sr);
+}
+
+/* NOTE: implementation of AmbientOccluder */
+AmbientOccluder::AmbientOccluder(void):
+	color(1, 1, 1),
+	ls(1),
+	min_amount(1, 1, 1)
+{}
+
+AmbientOccluder::AmbientOccluder(float ls_, const RGBColor& color_):
+	ls(ls_),
+	color(color_),
+	min_amount(1, 1, 1)
+{}
+
+AmbientOccluder::AmbientOccluder(float ls_, const RGBColor& color_, const RGBColor& min_amount_):
+	ls(ls_),
+	color(color_),
+	min_amount(min_amount_)
+{}
+
+void
+AmbientOccluder::set_sampler(Sampler* sampler_ptr_)
+{
+	sampler_ptr = sampler_ptr_;
+	sampler_ptr->map_samples_to_hemisphere(1);
+}
+
+Vector3D
+AmbientOccluder::get_direction(ShadeRec& sr)
+{
+	Point3D sp = sampler_ptr->sample_unit_hemisphere();
+	return (u * sp.x + v * sp.y + w * sp.z);
+}
+
+bool
+AmbientOccluder::in_shadow(const Ray& ray) const
+{
+	float t = FLT_MAX;
+	for (GeometricObject* obj_ptr: world.obj_ptrs)
+		if (obj_ptr->shadow_hit(ray, t))
+			return true;
+	return false;
+}
+
+RGBColor
+AmbientOccluder::L(ShadeRec& sr)
+{
+	w = sr.normal;
+	v = w ^ Vector3D(0.0072, 1.0, 0.0034);
+	v.normalize();
+	u = v ^ w;
+	Ray shadow_ray(sr.hit_point, get_direction(sr));
+	if (in_shadow(shadow_ray))
+		return min_amount * ls * color;
+	else
+		return color * ls;
+}
+
+/* NOTE: implementation of EnviormentLight */
+EnviormentLight::EnviormentLight(void):
+	Light()
+{
+	shadows = true;
+}
+
+EnviormentLight::~EnviormentLight()
+{}
+
+void
+EnviormentLight::set_sampler(Sampler* sampler_ptr_)
+{
+	sampler_ptr = sampler_ptr_;
+}
+
+void
+EnviormentLight::set_material(Material* material_ptr_)
+{
+	material_ptr = material_ptr_;
+}
+
+bool
+EnviormentLight::in_shadow(const Ray& ray) const
+{
+	float t = FLT_MAX;
+	for (auto& obj_ptr: world.obj_ptrs)
+		if (obj_ptr->shadow_hit(ray, t))
+			return true;
+	return false;
+}
+
+float
+EnviormentLight::pdf(const ShadeRec& sr) const
+{
+	return 1;
+}
+
+RGBColor
+EnviormentLight::L(ShadeRec& sr)
+{
+	return material_ptr->get_Le(sr);
+}
+
+Vector3D
+EnviormentLight::get_direction(ShadeRec& sr)
+{
+	w = sr.normal;
+	v = Vector3D(0.0034, 1, 0.0071) ^ w;
+	v.normalize();
+	u = v ^ w;
+	Point3D sp = sampler_ptr->sample_unit_hemisphere();
+	return (u * sp.x + v * sp.y + w * sp.z);
 }

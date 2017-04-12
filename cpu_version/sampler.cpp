@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <algorithm>
 
+#define PI 3.141592
+
 float
 rand_float()
 {
@@ -22,6 +24,7 @@ Sampler::Sampler():
 	count(0),
 	jump(0),
 	samples(),
+	samples_disk(),
 	shuffled_indices()
 {}
 
@@ -31,7 +34,11 @@ Sampler::Sampler(int num_samples_):
 	count(0),
 	jump(0),
 	samples(),
+	samples_disk(),
 	shuffled_indices()
+{}
+
+Sampler::~Sampler()
 {}
 
 Point2D
@@ -40,6 +47,89 @@ Sampler::sample_unit_square(void)
 	if (count % num_samples == 0)
 		jump = (rand() % num_sets) * num_samples;
 	return samples[jump + count++ % num_samples];
+}
+
+Point2D
+Sampler::sample_unit_disk(void)
+{
+	if (count % num_samples == 0)
+		jump = (rand() % num_sets) * num_samples;
+	return samples_disk[jump + count++ % num_samples];
+}
+
+Point3D
+Sampler::sample_unit_hemisphere(void)
+{
+	if (count % num_samples == 0)
+		jump = (rand() % num_sets) * num_samples;
+	return samples_hemisphere[jump + count++ % num_samples];
+}
+
+void
+Sampler::map_samples_to_unit_disk(void)
+{
+	float r, phi;
+	float x, y;
+	for (Point2D& p: samples)
+	{
+		x = 2 * p.x - 1;
+		y = 2 * p.y - 1;
+		if (x > -y)
+		{
+			if (x > y)
+			{
+				r = x;
+				if (x != 0)
+				phi = y / x;
+				else
+					phi = 0;
+			}
+			else
+			{
+				r = y;
+				if (y != 0)
+				phi = 2 - x / y;
+				else
+					phi = 0;
+			}
+		}
+		else
+		{
+			if (x < y)
+			{
+				r = -x;
+				if (x != 0)
+				phi = 4 + y / x;
+				else
+					phi = 0;
+			}
+			else
+			{
+				r = y;
+				if (y != 0)
+					phi = 6 - x / y;
+				else
+					phi = 0;
+			}
+		}
+		phi *= PI / 4.0;
+		samples_disk.push_back(Point2D(r * cosf(phi), r * sinf(phi)));
+	}
+}
+
+void
+Sampler::map_samples_to_hemisphere(const float e = 1)
+{
+	for (Point2D& p: samples)
+	{
+		float cos_phi = cosf(2 * PI * p.x);
+		float sin_phi = sinf(2 * PI * p.x);
+		float cos_theta = powf((1 - p.y), 1 / (e + 1));
+		float sin_theta = sqrtf(1 - cos_theta * cos_theta);
+		samples_hemisphere.push_back(Point3D(sin_theta * cos_phi,
+											 sin_theta * sin_phi,
+											 cos_theta));
+	}
 }
 
 /* Implementation of Jittered */
@@ -56,7 +146,6 @@ void
 Jittered::generate_samples(void)
 {
 	int n = (int)sqrtf(num_samples) + 1;
-
 	for (int p = 0; p < num_sets; p++)
 		for (int j = 0; j < n; j++)
 			for (int k = 0; k < n; k++)
@@ -95,7 +184,7 @@ void
 NRooks::shuffle_x_coordinates()
 {
 	for (int p = 0; p < num_sets; p++)
-		for (int i = 0; i < num_samples - 1; i++)
+		for (int i = 0; i < num_samples; i++)
 		{
 			int target = (int)rand() % num_samples + p * num_samples;
 			float temp = samples[i + p * num_samples + 1].x;
@@ -108,7 +197,7 @@ void
 NRooks::shuffle_y_coordinates()
 {
 	for (int p = 0; p < num_sets; p++)
-		for (int i = 0; i < num_samples - 1; i++)
+		for (int i = 0; i < num_samples; i++)
 		{
 			int target = (int)rand() % num_samples + p * num_samples;
 			float temp = samples[i + p * num_samples + 1].y;

@@ -8,6 +8,8 @@
 #include "World.h"
 #include "Material.h"
 #include "GeometricObject.h"
+#include <cmath>
+#include <iostream>
 
 #define INV_PI 0.31831f
 
@@ -148,6 +150,22 @@ Matte::area_light_shade(ShadeRec& sr) const
 	return L;
 }
 
+RGBColor
+Matte::path_shade(ShadeRec& sr) const
+{
+	float pdf;
+	Vector3D wi, wo = -sr.ray.d;
+	RGBColor f = diffuse_brdf->sample_f(sr, wo, wi, pdf);
+	float ndotwi = sr.normal * wi; sr.reflected_dir = wi;
+	float x = ndotwi / pdf;
+	if (isnan(x))
+	{
+		return f;
+	}
+	else
+		return f * (ndotwi / pdf);
+}
+
 /* NOTE: Phong */
 Phong::Phong(void):
 	ambient_brdf(new Lambertian),
@@ -240,6 +258,25 @@ Phong::area_light_shade(ShadeRec& sr) const
 	return L;
 }
 
+RGBColor
+Phong::path_shade(ShadeRec& sr) const
+{
+	float pdf;
+	Vector3D wi, wo = -sr.ray.d;
+	RGBColor f = diffuse_brdf->sample_f(sr, wo, wi, pdf);
+	float ndotwi = sr.normal * wi;
+	sr.reflected_dir = wi;
+	sr.depth += 1;
+	float x = ndotwi / pdf;
+	if (isnan(x))
+		return f;
+	else
+	{
+		return f * ((sr.normal * wi) * (ndotwi / pdf));
+	}
+}
+
+
 /* NOTE: implementation of Emissive */
 Emissive::Emissive(void):
 	ls(0),
@@ -254,6 +291,12 @@ RGBColor
 Emissive::shade(ShadeRec& sr) const
 {
 	return area_light_shade(sr);
+}
+
+RGBColor
+Emissive::path_shade(ShadeRec& sr) const
+{
+	return BLACK;
 }
 
 RGBColor
