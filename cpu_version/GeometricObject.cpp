@@ -5,7 +5,6 @@
 #   Last Modified : 2017-03-21 20:18
 # ====================================================*/
 
-#include "BBox.h"
 #include "GeometricObject.h"
 #include "ShadeRec.h"
 #include "sampler.h"
@@ -111,7 +110,7 @@ Sphere::shadow_hit(const Ray& ray, float& tmin)
 BBox
 Sphere::get_bounding_box(void)
 {
-	float dist = sqrtf(3 * radius + radius);
+	float dist = sqrtf(3 * radius * radius);
 	return BBox(center.x - dist, center.y - dist, center.z - dist,
 		 center.x + dist, center.y + dist, center.z + dist);
 }
@@ -380,138 +379,6 @@ Triangle::get_bounding_box(void)
 	z1 = max(v0.z, max(v1.z, v2.z));
 	return BBox(x0, y0, z0, x1, y1, z1);
 }
-
-/* NOTE: implementation of Box */
-Box::Box(void):
-	x0(0.0), y0(0.0), z0(0.0),
-	x1(1.0), y1(1.0), z1(1.0)
-{}
-
-Box::Box(const float x0_, const float y0_, const float z0_,
-		   const float x1_, const float y1_, const float z1_):
-	x0(x0_), y0(y0_), z0(z0_),
-	x1(x1_), y1(y1_), z1(z1_)
-{}
-
-BBox
-Box::get_bounding_box(void)
-{
-	return BBox(x0, y0, z0, z1, y1, z1);
-}
-
-bool
-Box::hit(const Ray& ray, float& tmin, ShadeRec& sr)
-{
-	float ox = ray.o.x, oy = ray.o.y, oz = ray.o.z;
-	float dx = ray.d.x, dy = ray.d.y, dz = ray.d.z;
-
-	float tx_min, ty_min, tz_min;
-	float tx_max, ty_max, tz_max;
-
-	float a = 1.0 / dx;
-	if (a >= 0)
-	{
-		tx_min = (x0 - ox) * a;
-		tx_max = (x1 - ox) * a;
-	}
-	else
-	{
-		tx_min = (x1 - ox) * a;
-		tx_max = (x0 - ox) * a;
-	}
-
-	float b = 1.0 / dy;
-	if (b >= 0)
-	{
-		ty_min = (y0 - y1) * b;
-		ty_max = (y1 - oy) * b;
-	}
-	else
-	{
-		ty_min = (y1 - oy) * b;
-		ty_max = (y0 - oy) * b;
-	}
-
-	float c = 1.0 / dz;
-	if (c >= 0)
-	{
-		tz_min = (z0 - oz) * c;
-		tz_max = (z1 - oz) * c;
-	}
-	else
-	{
-		tz_min = (z1 - oz) * c;
-		tz_max = (z0 - oz) * c;
-	}
-
-	int face_in, face_out;
-	float t0, t1;
-	/* largest entering t value */
-	if (tx_min > ty_min)
-	{
-		t0 = tx_min;
-		face_in = (a >= 0) ? 0 : 3;
-	}
-	else
-	{
-		t0 = ty_min;
-		face_in = (b >= 0) ? 1 : 4;
-	}
-	if (tz_min > t0)
-	{
-		t0 = tz_min;
-		face_in = (c >= 0) ? 2 : 5;
-	}
-	/* smallest exiting t value */
-	if (tx_max < ty_max)
-	{
-		t1 = tx_max;
-		face_out = (a >= 0) ? 3 : 0;
-	}
-	else
-	{
-		t1 = ty_max;
-		face_out = (b >= 0) ? 4 : 1;
-	}
-	if (tx_max < t1)
-	{
-		t1 = tz_max;
-		face_out = (c >= 0) ? 5 : 2;
-	}
-
-	if (t0 < t1 && t1 > eps)
-	{
-		if (t0 > eps)
-		{
-			tmin = t0;
-			sr.normal = get_normal(face_in);
-		}
-		else
-		{
-			tmin = t1;
-			sr.normal = get_normal(face_out);
-		}
-		sr.local_hit_point = ray.o + ray.d * tmin;
-		return true;
-	}
-	return false;
-}
-
-Normal
-Box::get_normal(const int face) const
-{
-	switch (face)
-	{
-		case 0: return Normal(-1, 0, 0);
-		case 1: return Normal(0, -1, 0);
-		case 2: return Normal(0, 0, -1);
-		case 3: return Normal(1, 0, 0);
-		case 4: return Normal(0, 1, 0);
-		case 5: return Normal(0, 0, 1);
-	}
-	return Normal(0, 0, 0);
-}
-
 /* NOTE: implementation of Compound */
 Compound::Compound():
 	object_ptrs()
@@ -612,13 +479,217 @@ Grid::Grid(void):
 	nx(0), ny(0), nz(0)
 {}
 
+Grid::~Grid(void)
+{}
+
+BBox
+Grid::get_bounding_box(void)
+{
+	return bbox;
+}
+bool
+Grid::hit(const Ray& ray, float& t, ShadeRec& sr)
+{
+	float ox = ray.o.x;
+	float oy = ray.o.y;
+	float oz = ray.o.z;
+	float dx = ray.d.x;
+	float dy = ray.d.y;
+	float dz = ray.d.z;
+
+	float x0 = bbox.x0;
+	float y0 = bbox.y0;
+	float z0 = bbox.z0;
+	float x1 = bbox.x1;
+	float y1 = bbox.y1;
+	float z1 = bbox.z1;
+
+	float tx_min, ty_min, tz_min;
+	float tx_max, ty_max, tz_max;
+
+	/* the following code includes modifications from Shirley and Morley (2003) */
+
+	float a = 1.0 / dx;
+	if (a >= 0) {
+		tx_min = (x0 - ox) * a;
+		tx_max = (x1 - ox) * a;
+	}
+	else {
+		tx_min = (x1 - ox) * a;
+		tx_max = (x0 - ox) * a;
+	}
+
+	float b = 1.0 / dy;
+	if (b >= 0) {
+		ty_min = (y0 - oy) * b;
+		ty_max = (y1 - oy) * b;
+	}
+	else {
+		ty_min = (y1 - oy) * b;
+		ty_max = (y0 - oy) * b;
+	}
+
+	float c = 1.0 / dz;
+	if (c >= 0) {
+		tz_min = (z0 - oz) * c;
+		tz_max = (z1 - oz) * c;
+	}
+	else {
+		tz_min = (z1 - oz) * c;
+		tz_max = (z0 - oz) * c;
+	}
+
+	float t0, t1;
+
+	if (tx_min > ty_min)
+		t0 = tx_min;
+	else
+		t0 = ty_min;
+
+	if (tz_min > t0)
+		t0 = tz_min;
+
+	if (tx_max < ty_max)
+		t1 = tx_max;
+	else
+		t1 = ty_max;
+
+	if (tz_max < t1)
+		t1 = tz_max;
+
+	if (t0 > t1)
+		return(false);
+
+	/* initial cell coordinates */
+	int ix, iy, iz;
+
+	if (bbox.inside(ray.o)) {
+		ix = clamp((ox - x0) * nx / (x1 - x0), 0, nx - 1);
+		iy = clamp((oy - y0) * ny / (y1 - y0), 0, ny - 1);
+		iz = clamp((oz - z0) * nz / (z1 - z0), 0, nz - 1);
+	}
+	else {
+		Point3D p = ray.o + ray.d * t0;
+		ix = clamp((p.x - x0) * nx / (x1 - x0), 0, nx - 1);
+		iy = clamp((p.y - y0) * ny / (y1 - y0), 0, ny - 1);
+		iz = clamp((p.z - z0) * nz / (z1 - z0), 0, nz - 1);
+	}
+
+	/* ray parameter increments per cell in the x, y, and z directions */
+	float dtx = (tx_max - tx_min) / nx;
+	float dty = (ty_max - ty_min) / ny;
+	float dtz = (tz_max - tz_min) / nz;
+
+	float 	tx_next, ty_next, tz_next;
+	int 	ix_step, iy_step, iz_step;
+	int 	ix_stop, iy_stop, iz_stop;
+
+	if (dx > 0) {
+		tx_next = tx_min + (ix + 1) * dtx;
+		ix_step = +1;
+		ix_stop = nx;
+	}
+	else {
+		tx_next = tx_min + (nx - ix) * dtx;
+		ix_step = -1;
+		ix_stop = -1;
+	}
+
+	if (dx == 0.0) {
+		tx_next = FLT_MAX;
+		ix_step = -1;
+		ix_stop = -1;
+	}
+
+
+	if (dy > 0) {
+		ty_next = ty_min + (iy + 1) * dty;
+		iy_step = +1;
+		iy_stop = ny;
+	}
+	else {
+		ty_next = ty_min + (ny - iy) * dty;
+		iy_step = -1;
+		iy_stop = -1;
+	}
+
+	if (dy == 0.0) {
+		ty_next = FLT_MAX;
+		iy_step = -1;
+		iy_stop = -1;
+	}
+
+	if (dz > 0) {
+		tz_next = tz_min + (iz + 1) * dtz;
+		iz_step = +1;
+		iz_stop = nz;
+	}
+	else {
+		tz_next = tz_min + (nz - iz) * dtz;
+		iz_step = -1;
+		iz_stop = -1;
+	}
+
+	if (dz == 0.0) {
+		tz_next = FLT_MAX;
+		iz_step = -1;
+		iz_stop = -1;
+	}
+
+	/* traverse the grid */
+	while (true) {
+		GeometricObject* object_ptr = cells[ix + nx * iy + nx * ny * iz];
+
+		if (tx_next < ty_next && tx_next < tz_next) {
+			if (object_ptr && object_ptr->hit(ray, t, sr) && t < tx_next) {
+				material_ptr = object_ptr->get_material();
+				return (true);
+			}
+			tx_next += dtx;
+			ix += ix_step;
+			if (ix == ix_stop)
+				return (false);
+		}
+		else {
+			if (ty_next < tz_next) {
+				if (object_ptr && object_ptr->hit(ray, t, sr) && t < ty_next) {
+					material_ptr = object_ptr->get_material();
+					return (true);
+				}
+				ty_next += dty;
+				iy += iy_step;
+				if (iy == iy_stop)
+					return (false);
+		 	}
+		 	else {
+				if (object_ptr && object_ptr->hit(ray, t, sr) && t < tz_next) {
+					material_ptr = object_ptr->get_material();
+					return (true);
+				}
+				tz_next += dtz;
+				iz += iz_step;
+				if (iz == iz_stop)
+					return (false);
+		 	}
+		}
+	}
+}
+
+
+bool
+Grid::shadow_hit(const Ray& ray, float& t)
+{
+	ShadeRec sr;
+	return hit(ray, t, sr);
+}
+
 void
 Grid::setup_cells(void)
 {
 	Point3D p0 = min_coordinate();
 	Point3D p1 = max_coordinate();
 	bbox.x0 = p0.x; bbox.y0 = p0.y; bbox.z0 = p0.z;
-	bbox.x1 = p1.x; bbox.y1 = p1.y; bbox.z1 = p0.z;
+	bbox.x1 = p1.x; bbox.y1 = p1.y; bbox.z1 = p1.z;
 
 	int num_objects = object_ptrs.size();
 	float wx = p1.x - p0.x;
@@ -684,57 +755,41 @@ Grid::setup_cells(void)
 					}
 				}
 	}
-	object_ptrs.erase(object_ptrs.begin(), object_ptrs.end());
 	count.erase(count.begin(), count.end());
 }
 
 Point3D
 Grid::min_coordinate(void)
 {
-	BBox bbox;
+	BBox obj_bbox;
 	Point3D p0(FLT_MAX);
 
 	for (GeometricObject *obj_ptr: object_ptrs)
 	{
-		bbox = obj_ptr->get_bounding_box();
-		if (bbox.x0 < p0.x) p0.x = bbox.x0;
-		if (bbox.y0 < p0.y) p0.y = bbox.y0;
-		if (bbox.z0 < p0.z) p0.z = bbox.z0;
+		obj_bbox = obj_ptr->get_bounding_box();
+		if (obj_bbox.x0 < p0.x) p0.x = obj_bbox.x0;
+		if (obj_bbox.y0 < p0.y) p0.y = obj_bbox.y0;
+		if (obj_bbox.z0 < p0.z) p0.z = obj_bbox.z0;
 	}
 	p0.x -= eps; p0.y -= eps; p0.z -= eps;
+	bbox.x0 = p0.x; bbox.y0 = p0.y; bbox.z0 = p0.z;
 	return p0;
 }
 
 Point3D
 Grid::max_coordinate(void)
 {
-	BBox bbox;
-	Point3D p1(FLT_MAX);
+	BBox obj_bbox;
+	Point3D p1(FLT_MIN);
 	for (GeometricObject *obj_ptr: object_ptrs)
 	{
-		bbox = obj_ptr->get_bounding_box();
-		if (bbox.x1 > p1.x) p1.x = bbox.x1;
-		if (bbox.y1 > p1.y) p1.y = bbox.y1;
-		if (bbox.z1 > p1.z) p1.z = bbox.z1;
+		obj_bbox = obj_ptr->get_bounding_box();
+		if (obj_bbox.x1 > p1.x) p1.x = obj_bbox.x1;
+		if (obj_bbox.y1 > p1.y) p1.y = obj_bbox.y1;
+		if (obj_bbox.z1 > p1.z) p1.z = obj_bbox.z1;
 	}
 	p1.x += eps; p1.y += eps; p1.z += eps;
+	bbox.x1 = p1.x; bbox.y1 = p1.y; bbox.z1 = p1.z;
 	return p1;
-}
-
-/* NOTE: implementation of TrianglarPyramid */
-TrianglarPyramid::TrianglarPyramid()
-{
-	object_ptrs.push_back(new Triangle(Point3D(0, 0, 1), Point3D(0, 0, 0), Point3D(0, 1, 0)));
-	object_ptrs.push_back(new Triangle(Point3D(0, 0, 1), Point3D(0, 1, 0), Point3D(1, 0, 0)));
-	object_ptrs.push_back(new Triangle(Point3D(0, 0, 1), Point3D(0, 1, 0), Point3D(0, 0, 0)));
-	object_ptrs.push_back(new Triangle(Point3D(0, 0, 0), Point3D(0, 1, 0), Point3D(1, 0, 0)));
-}
-
-TrianglarPyramid::TrianglarPyramid(const Point3D& a, const Point3D& b, const Point3D& c, const Point3D& d)
-{
-	object_ptrs.push_back(new Triangle(a, c, b));
-	object_ptrs.push_back(new Triangle(a, b, d));
-	object_ptrs.push_back(new Triangle(a, d, c));
-	object_ptrs.push_back(new Triangle(d, b, c));
 }
 

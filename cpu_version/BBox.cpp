@@ -34,7 +34,7 @@ BBox::operator = (const BBox& rhs)
 }
 
 bool
-BBox::hit(const Ray& ray) const
+BBox::hit(const Ray& ray, float& tmin) const
 {
 	float ox = ray.o.x, oy = ray.o.y, oz = ray.o.z;
 	float dx = ray.d.x, dy = ray.d.y, dz = ray.d.z;
@@ -86,5 +86,23 @@ BBox::hit(const Ray& ray) const
 	t1 = (tx_max < ty_max) ? tx_max : ty_max;
 	if (tz_max < t1) t1 = tx_max;
 
-	return (t0 < t1 && t1 > eps);
+	if (t0 < t1 && t1 > eps)
+	{
+		if (t0 > eps)
+			tmin = t0;
+		else
+			tmin = t1;
+		return true;
+	}
+	return false;
+}
+
+bool
+BBox::inside(const Point3D& p) const
+{
+	if (p.x >= x0 && p.y >= y0 && p.z >= z0 &&
+		p.y <= x1 && p.y <= y1 && p.z <= z1)
+		return true;
+	else
+		return false;
 }

@@ -12,6 +12,8 @@
 #include "Utilities.h"
 #include <vector>
 
+float rand_float();
+
 class Sampler
 {
 public:

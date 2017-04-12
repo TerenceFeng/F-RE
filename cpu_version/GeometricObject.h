@@ -8,13 +8,13 @@
 #define  _GEOMETRICOBJECT_H
 
 #include <vector>
+#include "BBox.h"
 #include "RGBColor.h"
 #include "Utilities.h"
 #include "ShadeRec.h"
 #include "Material.h"
 
 class Sampler;
-class BBox;
 
 class GeometricObject
 {
@@ -114,19 +114,6 @@ public:
 	virtual BBox get_bounding_box(void);
 };
 
-class Box: public GeometricObject
-{
-public:
-	Box(void);
-	Box(const float, const float, const float, const float, const float, const float);
-	virtual bool hit(const Ray&, float&, ShadeRec&);
-	virtual BBox get_bounding_box(void);
-private:
-	float x0, y0, z0;
-	float x1, y1, z1;
-	Normal get_normal(const int) const;
-};
-
 class Compound: public GeometricObject
 {
 public:
@@ -145,6 +132,7 @@ class Grid: public Compound
 {
 public:
 	Grid(void);
+	~Grid(void);
 
 	virtual BBox get_bounding_box(void);
 	void setup_cells(void);
@@ -160,10 +148,4 @@ private:
 	Point3D max_coordinate(void);
 };
 
-class TrianglarPyramid: public Compound
-{
-public:
-	TrianglarPyramid(void);
-	TrianglarPyramid(const Point3D&, const Point3D&, const Point3D&, const Point3D&);
-};
 #endif
