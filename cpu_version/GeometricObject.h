@@ -127,25 +127,4 @@ public:
 protected:
 	std::vector<GeometricObject*> object_ptrs;
 };
-
-class Grid: public Compound
-{
-public:
-	Grid(void);
-	~Grid(void);
-
-	virtual BBox get_bounding_box(void);
-	void setup_cells(void);
-	virtual bool hit(const Ray&, float&, ShadeRec&);
-	virtual bool shadow_hit(const Ray&, float&);
-
-private:
-	std::vector<GeometricObject*> cells;
-	BBox bbox;
-	int nx, ny, nz;
-
-	Point3D min_coordinate(void);
-	Point3D max_coordinate(void);
-};
-
 #endif

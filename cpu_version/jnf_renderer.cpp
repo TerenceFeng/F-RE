@@ -6,6 +6,7 @@
 #   File Name     : ray_tracer.cpp
 #   Last Modified : 2017-03-17 18:25
 # ====================================================*/
+#include "Grid.h"
 #include "World.h"
 #include "camera.h"
 #include "Sampler.h"
@@ -32,7 +33,7 @@ void
 add_area_light()
 {
 	AreaLight *light_ptr2 = new AreaLight;
-	Rectangle *rect_ptr = new Rectangle(Point3D(250, 250, 250), Vector3D(30, 0, -9) * 1.3, Vector3D(0, -30, 1) * 1.3);
+	Rectangle *rect_ptr = new Rectangle(Point3D(100, 100, 100), Vector3D(30, 0, -9) * 0.7, Vector3D(0, -30, 1) * 0.7);
 	Emissive *ems_ptr = new Emissive(200.0, RGBColor(1, 1, 1));
 	rect_ptr->set_material(ems_ptr);
 	rect_ptr->set_sampler(&sampler);
@@ -40,6 +41,13 @@ add_area_light()
 	light_ptr2->set_material(ems_ptr);
 
 	world.add_light(light_ptr2);
+}
+
+void
+add_point_light()
+{
+	PointLight *light_ptr = new PointLight(5.0, RGBColor(1, 1, 1), Point3D(70, 70, 70));
+	world.add_light(light_ptr);
 }
 
 void
@@ -162,27 +170,49 @@ void add_plane()
 	world.add_object(plane_ptr);
 }
 
+void read_ply_file(char *filename)
+{
+	Phong* phont_ptr = new Phong;
+	phont_ptr->set_ka(0.1);
+	phont_ptr->set_kd(0.9);
+	phont_ptr->set_ks(0.45);
+	phont_ptr->set_es(5);
+	phont_ptr ->set_cd(RGBColor(0.4, 1.0, 0.58));
+
+	Grid *grid_ptr = new Grid;
+	grid_ptr->read_ply_file(filename);
+	grid_ptr->set_material(phont_ptr);
+	grid_ptr->setup_cells();
+	world.add_object(grid_ptr);
+}
+
 void
 build_world()
 {
 	add_ambient_occ();
 	add_area_light();
 	// add_random_balls_world();
-	add_random_balls();
+	// add_random_balls();
 	add_plane();
+	// add_point_light();
+	// add_pyramid_grid();
 }
 
 int
-main()
+main(int argc, char ** argv)
 {
 
-	World w;
-	sampler = NRooks(200);
+	sampler = NRooks(100);
 	sampler.map_samples_to_hemisphere(1);
 	build_world();
 
+	if (argc == 2)
+	{
+		read_ply_file(argv[1]);
+	}
+
 	/* plane: exposure_time: 0.1 */
-	camera = PinHole(Point3D(200, 200, 200), Point3D(30, 30, 30), 0.1, 400, 2);
+	camera = PinHole(Point3D(200, 200, 200), Point3D(30, 30, 30), 0.1, 400, 1);
 	camera.set_viewplane(400, 400, 1.0f);
 	camera.set_up(-1, -1, 1);
 	camera.render_scene();
