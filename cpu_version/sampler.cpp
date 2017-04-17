@@ -7,6 +7,7 @@
 # ====================================================*/
 
 #include "sampler.h"
+#include <ctime>
 #include <cstdlib>
 #include <algorithm>
 
@@ -15,7 +16,7 @@
 float
 rand_float()
 {
-	return (float)rand() / (float)(RAND_MAX);
+	return (float)(rand() + clock()) / (float)(RAND_MAX);
 }
 
 Sampler::Sampler():

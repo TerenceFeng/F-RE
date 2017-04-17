@@ -73,6 +73,9 @@ public:
 	inline Vector3D operator-() const {
 		return Vector3D(-x, -y, -z);
 	}
+	inline bool operator== (const Vector3D& v) const {
+		return x == v.x && y == v.y && z == v.z;
+	}
 	inline float length() {
 		return sqrtf(this->len_squared());
 	}

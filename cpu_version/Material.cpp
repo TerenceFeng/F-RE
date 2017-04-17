@@ -9,7 +9,7 @@
 #include "Material.h"
 #include "GeometricObject.h"
 #include <cmath>
-#include <iostream>
+#include <cstdio>
 
 #define INV_PI 0.31831f
 
@@ -45,28 +45,11 @@ Matte::Matte(const float ka_, const float kd_, const RGBColor& cd_):
 	set_ka(ka_);
 	set_kd(kd_);
 }
-Matte::Matte(const Matte& rhs):
-	cd(rhs.cd),
-	ambient_brdf(new Lambertian),
-	diffuse_brdf(new Lambertian)
-{
-	set_ka(rhs.get_ka());
-	set_kd(rhs.get_kd());
-}
 
 Matte::~Matte(void)
 {
 	delete ambient_brdf;
 	delete diffuse_brdf;
-}
-
-Matte&
-Matte::operator = (const Matte& rhs)
-{
-	cd = rhs.cd;
-	set_ka(rhs.get_ka());
-	set_kd(rhs.get_kd());
-	return (*this);
 }
 
 void
@@ -153,6 +136,9 @@ Matte::area_light_shade(ShadeRec& sr) const
 RGBColor
 Matte::path_shade(ShadeRec& sr) const
 {
+	sr.color = area_light_shade(sr);
+	sr.depth++;
+
 	float pdf;
 	Vector3D wi, wo = -sr.ray.d;
 	RGBColor f = diffuse_brdf->sample_f(sr, wo, wi, pdf);
@@ -296,7 +282,11 @@ Emissive::shade(ShadeRec& sr) const
 RGBColor
 Emissive::path_shade(ShadeRec& sr) const
 {
-	return BLACK;
+	sr.reflected_dir = sr.ray.d;
+	if (-sr.normal * sr.ray.d > 0.0)
+		return ce * ls;
+	else
+		return BLACK;
 }
 
 RGBColor
@@ -307,8 +297,123 @@ Emissive::area_light_shade(ShadeRec& sr) const
 	else
 		return BLACK;
 }
+
 RGBColor
 Emissive::get_Le(ShadeRec& sr) const
 {
 	return ce * ls;
+}
+
+/* NOTE: implementation of Emissive */
+Reflective::Reflective(void):
+	Phong(),
+	reflective_brdf(new PerfectSpecular)
+{}
+
+Reflective::Reflective(const float ka_, const float kd_, const float ks_, const float kr_, const float es_, const RGBColor& cd_, const RGBColor& cr_):
+	Phong(),
+	reflective_brdf(new PerfectSpecular)
+{
+	Phong::set_ka(ka_);
+	Phong::set_kd(kd_);
+	Phong::set_ks(ks_);
+	Phong::set_es(es_);
+	Phong::set_cd(cd_);
+	set_cr(cr_);
+	set_kr(kr_);
+}
+
+void
+Reflective::set_cr(const RGBColor& cr_)
+{
+	reflective_brdf->set_cr(cr_);
+}
+
+void
+Reflective::set_kr(const float kr_)
+{
+	reflective_brdf->set_kr(kr_);
+}
+
+RGBColor
+Reflective::area_light_shade(ShadeRec& sr) const
+{
+	RGBColor L(Phong::area_light_shade(sr));
+
+	Vector3D wo = -sr.ray.d;
+	Vector3D wi;
+	float dummy_pdf;
+	RGBColor fr = reflective_brdf->sample_f(sr, wo, wi, dummy_pdf);
+	sr.reflected_dir = wi;
+
+	sr.color += L;
+	return RGBColor(fr * (sr.normal * wi));
+}
+
+RGBColor
+Reflective::path_shade(ShadeRec& sr) const
+{
+	Vector3D wo = -sr.ray.d;
+	Vector3D wi;
+	float dummy_pdf; /* always 1 in PerfectSpecular BRDf */
+	RGBColor fr = reflective_brdf->sample_f(sr, wo, wi, dummy_pdf);
+	sr.reflected_dir = wi;
+
+	return fr * (sr.normal * wi);
+}
+
+/* NOTE: implementation of GlossyReflective */
+GlossyReflective::GlossyReflective(void):
+	Phong(),
+	glossy_specular_brdf(new GlossySpecular)
+{}
+
+void
+GlossyReflective::set_kr(const float kr_)
+{
+	glossy_specular_brdf->set_ks(kr_);
+}
+
+void
+GlossyReflective::set_cr(const RGBColor& cr_)
+{
+	Phong::set_cd(cr_);
+	glossy_specular_brdf->set_cd(cr_);
+}
+
+void
+GlossyReflective::set_exponent(const float e_)
+{
+	glossy_specular_brdf->set_e(e_);
+	Phong::set_es(e_);
+	glossy_specular_brdf->set_samples(100, e_);
+}
+
+RGBColor
+GlossyReflective::area_light_shade(ShadeRec& sr) const
+{
+	sr.color = Phong::area_light_shade(sr);
+	Vector3D wo(-sr.ray.d);
+	wo.normalize();
+	Vector3D wi;
+	float pdf;
+	RGBColor fr(glossy_specular_brdf->sample_f(sr, wo, wi, pdf));
+	sr.reflected_dir = wi;
+
+	float ndotwi = (sr.normal * wi);
+	return fr * ndotwi / pdf;
+}
+
+RGBColor
+GlossyReflective::path_shade(ShadeRec& sr) const
+{
+	sr.color = Phong::area_light_shade(sr);
+
+	Vector3D wo = -sr.ray.d;
+	Vector3D wi;
+	float pdf;
+	RGBColor fr = glossy_specular_brdf->sample_f(sr, wo, wi, pdf);
+
+	sr.reflected_dir = wi;
+	return fr * (sr.normal * wi) / pdf;
 }

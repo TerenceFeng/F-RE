@@ -97,6 +97,7 @@ const RGBColor black(0.0f);
 const RGBColor red(1.0f, 0.0f, 0.0f);
 const RGBColor BLACK(0.0f);
 const RGBColor RED(1.0f, 0.0f, 0.0f);
+const RGBColor WHITE(1.0f);
 
 #endif // _RGBCOLOR_H
 
