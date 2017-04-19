@@ -171,11 +171,14 @@ struct Vec3
     }
     Vec3<T> &norm()
     {
-        // T mod = rsqrt(x * x + y * y + z * z);
-        T mod = T(1) / sqrt(x * x + y * y + z * z);
-        x *= mod;
-        y *= mod;
-        z *= mod;
+        if (!isZero())
+        {
+            // T mod = rsqrt(x * x + y * y + z * z);
+            T mod = T(1) / sqrt(x * x + y * y + z * z);
+            x *= mod;
+            y *= mod;
+            z *= mod;
+        }
         return *this;
     }
     Vec3<T> &assign(T _x, T _y, T _z)

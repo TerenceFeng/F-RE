@@ -56,6 +56,20 @@ class ComputeEngine
         }
     }
     template <typename F, size_t N, template <size_t> class MD, typename R,
+              typename P1, typename P2, typename P3, typename P4>
+    static void Dispatch(EDevice device, F f, R *out, MD<N> &s, P1 *in1,
+                         P2 *in2, P3 *in3, P4 *in4)
+    {
+        if (device == CPU)
+        {
+            for (auto &p : s)
+            {
+                f(out, s, p, in1, in2, in3, in4);
+                fprintf(stderr, "\r%lu/%lu", p[N - 1] + 1, s[N - 1]);
+            }
+        }
+    }
+    template <typename F, size_t N, template <size_t> class MD, typename R,
               typename P1, typename P2, typename P3, typename P4, typename P5>
     static void Dispatch(EDevice device, F f, R *out, MD<N> &s, P1 *in1,
                          P2 *in2, P3 *in3, P4 *in4, P5 *in5)

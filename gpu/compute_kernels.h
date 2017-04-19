@@ -156,8 +156,8 @@ void kernel_simple(Color *img, const MDSpace<2> &dim, const MDPoint<2> &pos,
 void shoot_ray(Ray *ray, const MDSpace<2> &dim, const MDPoint<2> &pos,
                const Camera *camera)
 {
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
     int i = y * w + x;
     Ray r = {camera->pos, camera->dir};
     float half_clip_x = tanf(0.5f * camera->fov_v);
@@ -167,24 +167,14 @@ void shoot_ray(Ray *ray, const MDSpace<2> &dim, const MDPoint<2> &pos,
     r.dir.norm();
     ray[i] = r;
 }
-void ray2color(Color *color, const MDSpace<2> &dim, const MDPoint<2> &pos,
-               const Ray *ray)
-{
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
-    int i = y * w + x;
-    color[i].r = fabs(ray[i].dir.x);
-    color[i].g = fabs(ray[i].dir.y);
-    color[i].b = fabs(ray[i].dir.z);
-}
 
 // collect objects, hit-pos
 void calc_obj_pos(const Object **obj, Point *hit, const MDSpace<2> &dim,
                   const MDPoint<2> &pos, const Ray *rays, const Object *object,
                   size_t *nobj)
 {
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
     int i = y * w + x;
 
     const Ray &r = rays[i];
@@ -203,24 +193,6 @@ void calc_obj_pos(const Object **obj, Point *hit, const MDSpace<2> &dim,
     obj[i] = o;
     hit[i] = r.pos + Vector::Scale(r.dir, t_min);
 }
-void obj2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
-               const Object **obj)
-{
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
-    int i = y * w + x;
-    c[i].r = c[i].g = c[i].b = (obj[i]) ? 1.0f : 0.0f;
-}
-void pos2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
-               const Point *hit, const Object **obj)
-{
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
-    int i = y * w + x;
-    c[i].v.zero();
-    if (obj[i])
-        c[i].r = c[i].g = c[i].b = fabs(2.7f - hit[i].z);
-}
 
 // collect normal
 void calc_normal(Normal *nr, const MDSpace<2> &dim, const MDPoint<2> &pos,
@@ -233,64 +205,40 @@ void calc_normal(Normal *nr, const MDSpace<2> &dim, const MDPoint<2> &pos,
     if (obj[i])
         nr[i] = obj[i]->shape->getNormal(hit[i]);
 }
-void nr2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
-              const Normal *nr, const Object **obj)
-{
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
-    int i = y * w + x;
-    c[i].v.zero();
-    if (obj[i])
-    {
-        c[i].r = fabs(nr[i].x);
-        c[i].g = fabs(nr[i].y);
-        c[i].b = fabs(nr[i].z);
-    }
-}
 
 // collect wi
-// count(wi) = count(nr) * count(light)
+// count(wi) = N * nlight
 void calc_wi(Vector *wi, const MDSpace<2> &dim, const MDPoint<2> &pos,
-             const Point *hit, const Light **light, const size_t *nlight)
+             const Point *hit, const Object **obj,
+             const Light **light, const size_t *nlight)
 {
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
     int i = y * w + x;
-    wi = wi + (*nlight) * i;
-    for (int L = 0; L < *nlight; ++L)
-        wi[L] = light[L]->getDirection(hit[i]);
-}
-void wi2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
-              const Vector *wi, const Object **obj)
-{
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
-    int i = y * w + x;
-    c[i].v.zero();
     if (obj[i])
     {
-        c[i].r = fabs(wi[i].x);
-        c[i].g = fabs(wi[i].y);
-        c[i].b = fabs(wi[i].z);
+        wi = wi + (*nlight) * i;
+        for (int L = 0; L < *nlight; ++L)
+            wi[L] = light[L]->getDirection(hit[i]);
     }
 }
 void calc_wo(Vector *wo, const MDSpace<2> &dim, const MDPoint<2> &pos,
              const Ray *ray)
 {
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
     int i = y * w + x;
     wo[i] = Vector::Scale(ray[i].dir, -1.0f);
 }
 
 // brdf(n, wi, wo) -> f
-// count(f) = count(wi)
+// count(f) = N * nlight
 void calc_f(Color *f, const MDSpace<2> &dim, const MDPoint<2> &pos,
             const Normal *nr, const Vector *wi, const Vector *wo,
             const Object **obj, const size_t *nlight)
 {
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
     int i = y * w + x;
     if (obj[i])
     {
@@ -302,29 +250,93 @@ void calc_f(Color *f, const MDSpace<2> &dim, const MDPoint<2> &pos,
         }
     }
 }
-void f2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
-             const Color *f)
-{
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
-    int i = y * w + x;
-    c[i] = f[i];
-}
 
 // f * L = color
+// count(L) = N * nlight
 void calc_color(Color *color, const MDSpace<2> &dim, const MDPoint<2> &pos,
                 const Normal *nr, const Vector *wi, const Point *hit,
                 const Color *f, const Light **light, const size_t *nlight)
 {
-    int h = dim[0], w = dim[1];
-    int y = pos[0], x = pos[1];
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
     int i = y * w + x;
+    f = f + (*nlight) * i;
+    wi = wi + (*nlight) * i;
     Color c;
     for (int L = 0; L < *nlight; ++L)
     {
-        c = f[i];
+        c = f[L];
         c.v.mul(light[L]->Sample_L(hit[i], nullptr, nullptr).v)
-            .scale(nr[i].dot(wi[i]));
+            .scale(nr[i].dot(wi[L]));
         color[i].v += c.v;
     }
+}
+
+// DEBUG
+void ray2color(Color *color, const MDSpace<2> &dim, const MDPoint<2> &pos,
+               const Ray *ray)
+{
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
+    int i = y * w + x;
+    color[i].v.zero();
+    color[i].r = fabs(ray[i].dir.x + 0.5f);
+    color[i].g = fabs(ray[i].dir.y + 0.5f);
+    color[i].b = fabs(ray[i].dir.z);
+}
+void obj2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
+               const Object **obj)
+{
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
+    int i = y * w + x;
+    c[i].r = c[i].g = c[i].b = (obj[i]) ? 1.0f : 0.0f;
+}
+void pos2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
+               const Point *hit, const Object **obj)
+{
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
+    int i = y * w + x;
+    c[i].v.zero();
+    if (obj[i])
+        c[i].r = c[i].g = c[i].b = fabs(2.7f - hit[i].z);
+}
+void nr2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
+              const Normal *nr, const Object **obj)
+{
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
+    int i = y * w + x;
+    c[i].v.zero();
+    if (obj[i])
+    {
+        c[i].r = fabs(nr[i].x);
+        c[i].g = fabs(nr[i].y);
+        c[i].b = fabs(nr[i].z);
+    }
+}
+void wi2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
+              const Vector *wi, const Object **obj, const size_t *nlight,
+              const size_t *L)
+{
+    int h = dim[0], w = dim[1];
+    int y = pos[0], x = pos[1];
+    int i = y * w + x;
+    wi = wi + (*nlight) * i + (*L);
+    c[i].v.zero();
+    if (obj[i])
+    {
+        c[i].r = fabs(wi->x + 0.5f);
+        c[i].g = fabs(wi->y + 0.5f);
+        c[i].b = fabs(wi->z);
+    }
+}
+void f2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
+             const Color *f, const size_t *nlight, const size_t *L)
+{
+    int w = dim[0], h = dim[1];
+    int x = pos[0], y = pos[1];
+    int i = y * w + x;
+    c[i] = *(f + (*nlight) * i + (*L));
 }
