@@ -7,7 +7,7 @@
 # ====================================================*/
 #include "World.h"
 #include "Material.h"
-#include "GeometricObject.h"
+#include "Object.h"
 #include <cmath>
 #include <cstdio>
 
@@ -15,35 +15,42 @@
 
 extern World world;
 
+Material::Material():
+	color(BLACK)
+{}
+
 Material::~Material() {}
-Material&
-Material::operator = (const Material& rhs) {
-	return (*this);
-}
 RGBColor
 Material::area_light_shade(ShadeRec& sr) const
-{	return BLACK; }
+{ return BLACK; }
 
 RGBColor
-Material::shade(ShadeRec& sr) const
-{	return BLACK; }
+Material::path_shade(ShadeRec&) const
+{ return BLACK; }
 
 RGBColor
 Material::get_Le(ShadeRec& sr) const
-{	return BLACK; }
+{ return BLACK; }
+
+void
+Material::set_color(const RGBColor& c_)
+{
+	color = c_;
+}
 
 /* implementation of Matte */
 Matte::Matte(void):
 	ambient_brdf(new Lambertian),
 	diffuse_brdf(new Lambertian)
 {}
-Matte::Matte(const float ka_, const float kd_, const RGBColor& cd_):
-	cd(cd_),
+Matte::Matte(const float ka_, const float kd_, const RGBColor& c_):
 	ambient_brdf(new Lambertian),
 	diffuse_brdf(new Lambertian)
 {
 	set_ka(ka_);
 	set_kd(kd_);
+	color = c_;
+	set_color(c_);
 }
 
 Matte::~Matte(void)
@@ -65,38 +72,11 @@ Matte::set_kd(const float kd_)
 }
 
 void
-Matte::set_cd(const RGBColor& cd_)
+Matte::set_color(const RGBColor& c_)
 {
-	ambient_brdf->set_cd(cd_);
-	diffuse_brdf->set_cd(cd_);
-}
-
-RGBColor
-Matte::shade(ShadeRec& sr) const
-{
-	Vector3D wo = -sr.ray.d;
-	RGBColor L = ambient_brdf->rho(sr, wo) * world.ambient_ptr->L(sr);
-
-	for (auto light_ptr: world.light_ptrs)
-	{
-		Vector3D wi = light_ptr->get_direction(sr);
-		float ndotwi = sr.normal * wi;
-
-		if (ndotwi > 0.0f) {
-			bool in_shadow = false;
-			if (light_ptr->cast_shadows())
-			{
-				Ray shadow_ray(sr.hit_point, wi);
-				in_shadow = light_ptr->in_shadow(shadow_ray);
-			}
-
-			if (in_shadow)
-				L += diffuse_brdf->f(sr, wo, wi)
-					* light_ptr->L(sr)
-					* ndotwi;
-		}
-	}
-	return L;
+	color = c_;
+	ambient_brdf->set_color(c_);
+	diffuse_brdf->set_color(c_);
 }
 
 RGBColor
@@ -112,12 +92,8 @@ Matte::area_light_shade(ShadeRec& sr) const
 
 		if (ndotwi > 0.0f)
 		{
-			bool in_shadow = false;
-			if (light_ptr->cast_shadows())
-			{
-				Ray shadow_ray(sr.hit_point, wi);
-				in_shadow = light_ptr->in_shadow(shadow_ray);
-			}
+			Ray shadow_ray(sr.hit_point, wi);
+			bool in_shadow = light_ptr->in_shadow(shadow_ray);
 
 			if (!in_shadow)
 			{
@@ -137,7 +113,6 @@ RGBColor
 Matte::path_shade(ShadeRec& sr) const
 {
 	sr.color = area_light_shade(sr);
-	sr.depth++;
 
 	float pdf;
 	Vector3D wi, wo = -sr.ray.d;
@@ -171,44 +146,11 @@ void
 Phong::set_es(const float es_)
 { specular_brdf->set_e(es_); }
 void
-Phong::set_cd(const RGBColor cd_)
+Phong::set_color(const RGBColor c_)
 {
-	ambient_brdf->set_cd(cd_);
-	diffuse_brdf->set_cd(cd_);
-	specular_brdf->set_cd(cd_);
-}
-
-RGBColor
-Phong::shade(ShadeRec& sr) const
-{
-	Vector3D wo = -sr.ray.d;
-	wo.normalize();
-	RGBColor L = ambient_brdf->rho(sr, wo) * world.ambient_ptr->L(sr);
-
-	for (auto light_ptr: world.light_ptrs)
-	{
-		Vector3D wi = light_ptr->get_direction(sr);
-		wi.normalize();
-		float ndotwi = sr.normal * wi;
-		if (ndotwi > 0.0f) {
-			bool in_shadow = false;
-			if (light_ptr->cast_shadows())
-			{
-				Ray shadowRay(sr.hit_point, wi);
-				in_shadow = light_ptr->in_shadow(shadowRay);
-			}
-
-			if (!in_shadow)
-				L += (diffuse_brdf->f(sr, wo, wi)
-						+ specular_brdf->f(sr, wo, wi))
-					* light_ptr->L(sr)
-					* light_ptr->G(sr)
-					* ndotwi
-					/ light_ptr->pdf(sr);
-		}
-	}
-
-	return L;
+	ambient_brdf->set_color(c_);
+	diffuse_brdf->set_color(c_);
+	specular_brdf->set_color(c_);
 }
 
 RGBColor
@@ -216,7 +158,7 @@ Phong::area_light_shade(ShadeRec& sr) const
 {
 	Vector3D wo = -sr.ray.d;
 	wo.normalize();
-	RGBColor L = ambient_brdf->rho(sr, wo) * world.ambient_ptr->L(sr);
+	RGBColor L;
 
 	for (auto light_ptr: world.light_ptrs)
 	{
@@ -224,12 +166,8 @@ Phong::area_light_shade(ShadeRec& sr) const
 		wi.normalize();
 		float ndotwi = sr.normal * wi;
 		if (ndotwi > 0.0f) {
-			bool in_shadow = false;
-			if (light_ptr->cast_shadows())
-			{
-				Ray shadowRay(sr.hit_point, wi);
-				in_shadow = light_ptr->in_shadow(shadowRay);
-			}
+			Ray shadowRay(sr.hit_point, wi);
+			bool in_shadow = light_ptr->in_shadow(shadowRay);
 
 			if (!in_shadow)
 				L += (diffuse_brdf->f(sr, wo, wi)
@@ -265,26 +203,22 @@ Phong::path_shade(ShadeRec& sr) const
 
 /* NOTE: implementation of Emissive */
 Emissive::Emissive(void):
-	ls(0),
-	ce(BLACK)
-{}
-Emissive::Emissive(int ls_, const RGBColor& ce_):
-	ls(ls_),
-	ce(ce_)
-{}
-
-RGBColor
-Emissive::shade(ShadeRec& sr) const
+	ls(0)
 {
-	return area_light_shade(sr);
+	color = BLACK;
+}
+
+Emissive::Emissive(int ls_, const RGBColor& c_):
+	ls(ls_)
+{
+	color = c_;
 }
 
 RGBColor
 Emissive::path_shade(ShadeRec& sr) const
 {
-	sr.reflected_dir = sr.ray.d;
 	if (-sr.normal * sr.ray.d > 0.0)
-		return ce * ls;
+		return color * ls;
 	else
 		return BLACK;
 }
@@ -293,7 +227,7 @@ RGBColor
 Emissive::area_light_shade(ShadeRec& sr) const
 {
 	if (-sr.normal * sr.ray.d > 0.0)
-		return ce * ls;
+		return color * ls;
 	else
 		return BLACK;
 }
@@ -301,7 +235,7 @@ Emissive::area_light_shade(ShadeRec& sr) const
 RGBColor
 Emissive::get_Le(ShadeRec& sr) const
 {
-	return ce * ls;
+	return color * ls;
 }
 
 /* NOTE: implementation of Emissive */
@@ -318,15 +252,15 @@ Reflective::Reflective(const float ka_, const float kd_, const float ks_, const 
 	Phong::set_kd(kd_);
 	Phong::set_ks(ks_);
 	Phong::set_es(es_);
-	Phong::set_cd(cd_);
-	set_cr(cr_);
+	Phong::set_color(cd_);
+	set_color(cr_);
 	set_kr(kr_);
 }
 
 void
-Reflective::set_cr(const RGBColor& cr_)
+Reflective::set_color(const RGBColor& c_)
 {
-	reflective_brdf->set_cr(cr_);
+	reflective_brdf->set_color(c_);
 }
 
 void
@@ -375,10 +309,10 @@ GlossyReflective::set_kr(const float kr_)
 }
 
 void
-GlossyReflective::set_cr(const RGBColor& cr_)
+GlossyReflective::set_color(const RGBColor& c_)
 {
-	Phong::set_cd(cr_);
-	glossy_specular_brdf->set_cd(cr_);
+	Phong::set_color(c_);
+	glossy_specular_brdf->set_color(c_);
 }
 
 void

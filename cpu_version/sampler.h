@@ -42,15 +42,6 @@ protected:
 	void shuffle_samples(void);
 };
 
-class Jittered: public Sampler
-{
-public:
-	Jittered();
-	Jittered(int);
-private:
-	virtual void generate_samples(void);
-};
-
 class NRooks: public Sampler
 {
 public:

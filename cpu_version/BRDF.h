@@ -22,28 +22,27 @@ public:
 	 * virtual RGBColor f(const ShadeRec& sr, const Vector3D& wi, const Vector3D& wo) const;
 	 * virtual RGBColor rho(const ShadeRec& sr, const Vector3D& wo) const;
 	 */
+	BRDF(void);
 	void set_sampler(Sampler*);
+	virtual void set_color(const RGBColor&);
 protected:
 	Sampler* sampler_ptr;
+	RGBColor color;
 };
 
 class Lambertian: public BRDF
 {
 public:
 	Lambertian();
-	Lambertian(float kd_, RGBColor cd_);
-	Lambertian(const Lambertian& l);
+	Lambertian(const float, const RGBColor&);
 	virtual RGBColor f(const ShadeRec&, const Vector3D& wo, const Vector3D& wi) const;
 	RGBColor sample_f(const ShadeRec&, const Vector3D& wo, Vector3D& wi, float& pdf) const;
 	virtual RGBColor rho(const ShadeRec& sr, const Vector3D& wo) const;
-	RGBColor get_color();
 	void set_kd(const float);
-	void set_cd(const RGBColor&);
 
 private:
 	/* diffuse reflection coefficient */
 	float kd;
-	RGBColor cd;
 };
 
 class GlossySpecular: public BRDF
@@ -60,12 +59,10 @@ public:
 
 	void set_ks(const float ks_);
 	void set_e(const float e_);
-	void set_cd(const RGBColor& cd_);
 
 private:
 	float ks;
-	float e; /* exponational coefficient */
-	RGBColor cd;
+	float e;
 };
 
 class PerfectSpecular: public BRDF
@@ -74,13 +71,10 @@ public:
 	PerfectSpecular(void);
 	PerfectSpecular(const float kr_, const RGBColor& cr_);
 	RGBColor sample_f(const ShadeRec& sr, const Vector3D& wo, Vector3D& wi, float& pdf) const;
-	RGBColor get_color();
 
 	void set_kr(const float kr);
-	void set_cr(const RGBColor& cr_);
 private:
 	float kr;
-	RGBColor cr;
 };
 
 #endif // _BRDF_H

@@ -1,11 +1,16 @@
 FLAGS		 = -w -g -std=c++11
-OBJECTS		= GeometricObject.cpp Grid.cpp ply.cpp BBox.cpp
+OBJECTS		= Object.cpp Grid.cpp ply.cpp BBox.cpp
 MODELS		= Light.cpp Material.cpp BRDF.cpp
-UTILITIES	= sampler.cpp RGBColor.cpp ShadeRec.cpp Utilities.cpp World.cpp Display.cpp camera.cpp
+UTILITIES	= sampler.cpp RGBColor.cpp ShadeRec.cpp Utilities.cpp World.cpp camera.cpp
+TARGET		= renderer
 
-all: clean renderer
+default: clean renderer
 
-renderer:
+test: clean $(TARGET)
+	time ./$(TARGET)
+	open result.ppm
+
+$(TARGET):
 	g++ jnf_renderer.cpp $(OBJECTS) $(MODELS) $(UTILITIES) $(FLAGS) -o $@
 
 clean:

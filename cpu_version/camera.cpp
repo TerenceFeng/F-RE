@@ -6,7 +6,6 @@
 #   File Name     : camera.cpp
 # ====================================================*/
 
-#include "Display.h"
 #include "camera.h"
 #include "sampler.h"
 #include "World.h"
@@ -19,30 +18,51 @@ const Vector3D UP(0, 0, 1);
 extern NRooks sampler;
 
 Camera::Camera():
-	position(),
+	position(Point3D(200, 200, 200)),
 	lookat(),
 	up(UP),
+	width(200),
+	height(200),
+	s(1),
+	exposure_time(0.01),
+	d(100),
+	zoom(1)
+{
+	compute_uvw();
+}
+
+Camera::Camera(const Point3D& position_, const Point3D& lookat_):
+	position(position_),
+	lookat(lookat_),
+	up(UP),
+	width(200),
+	height(200),
+	s(1),
 	exposure_time(0.01)
 {
 	compute_uvw();
 }
 
-Camera::Camera(Point3D position_, Point3D lookat_):
+Camera::Camera(const Point3D& position_, const Point3D& lookat_, const Vector3D& up_, const float exp_time_, const float d_, const float zoom_):
 	position(position_),
 	lookat(lookat_),
-	up(UP),
-	exposure_time(0.01)
+	exposure_time(exp_time_),
+	d(d_),
+	s(1),
+	up(up_),
+	width(200),
+	height(200),
+	zoom(zoom_)
 {
 	compute_uvw();
 }
 
-Camera::Camera(Point3D position_, Point3D lookat_, float exp_time_):
-	position(position_),
-	lookat(lookat_),
-	up(UP),
-	exposure_time(exp_time_)
+Vector3D
+Camera::ray_direction(const float& xv, const float& yv) const
 {
-	compute_uvw();
+	Vector3D dir = u * xv + v * yv - w * d;
+	dir.normalize();
+	return dir;
 }
 
 void
@@ -56,43 +76,59 @@ Camera::compute_uvw(void)
 }
 
 void
-Camera::set_viewplane(int h_ = 200, int w_ = 200, float s_ = 1.0f)
+Camera::set_viewplane(int w_, int h_, float s_)
 {
-	height = h_;
 	width = w_;
+	height = h_;
 	s = s_;
+
+	pixels = std::vector<std::vector<float>>(height);
+	maxval = FLT_MIN;
 }
 
 void
-Camera::set_up(int a, int b, int c)
+Camera::set_up(const Vector3D& up_)
 {
-	up = Vector3D(a, b, 0);
+	up = up_;
 	up.normalize();
 }
 
-/* NOTE: PinHole */
-PinHole::PinHole():
-	Camera(),
-	d(100),
-	zoom(1)
-{}
-
-PinHole::PinHole(Point3D position_, Point3D lookat_, float exp_time_, float d_, float zoom_ = 1):
-	Camera(position_, lookat_, exp_time_),
-	d(d_),
-	zoom(zoom_)
-{}
-
-Vector3D
-PinHole::ray_direction(const float& xv, const float& yv) const
+void
+Camera::add_pixel(int r, int c, RGBColor& color)
 {
-	Vector3D dir = u * xv + v * yv - w * d;
-	dir.normalize();
-	return dir;
+	// max_to_one(color);
+	maxval = std::max(maxval, color.r);
+	pixels[r].push_back(color.r);
+	maxval = std::max(maxval, color.g);
+	pixels[r].push_back(color.g);
+	maxval = std::max(maxval, color.b);
+	pixels[r].push_back(color.b);
 }
 
 void
-PinHole::render_scene()
+Camera::print() {
+	FILE *fp;
+	fp = fopen("result.ppm", "wb");
+	if (!fp) {
+		fprintf(stderr, "ERROR: cannot open output file: %s\n", strerror(errno));
+		return;
+	}
+
+	fprintf(fp, "P6\n");
+	fprintf(fp, "%d %d\n%d\n", width, height, 255);
+	printf("%f\n", maxval);
+	for(int r = pixels.size() - 1; r >= 0; r--) {
+		for(int c = 0; c < pixels[r].size(); c++) {
+			fprintf(fp, "%c", (unsigned char)(int)(pixels[r][c] / maxval * 255));
+		}
+	}
+	fprintf(fp, "\n");
+	fclose(fp);
+
+}
+
+void
+Camera::render_scene()
 {
 	RGBColor L;
 	Ray ray;
@@ -101,9 +137,9 @@ PinHole::render_scene()
 
 	ray.o = position;
 	float x, y;
-	Display printer(height, width);
 	Point2D sp;
 
+	printf("%d\n", sampler.num_samples);
 	for (int r = 0; r < height; r++)
 		for (int c = 0; c < width; c++)
 		{
@@ -117,16 +153,16 @@ PinHole::render_scene()
 				// L += trace_ray(ray);
 				L += trace_path(ray, 0);
 			}
+
 			L /= sampler.num_samples;
-			L = L * exposure_time;
-			printer.add_pixel(r, c, L);
+			add_pixel(r, c, L);
 		}
 
-	printer.display();
+	print();
 }
 
 RGBColor
-PinHole::cast_ray(const Ray& ray)
+Camera::trace_ray(const Ray& ray)
 {
 	ShadeRec sr;
 	sr.color = BLACK;
@@ -135,7 +171,7 @@ PinHole::cast_ray(const Ray& ray)
 	Point3D local_hit_point;
 	float tmin = FLT_MAX;
 	int num_objects = world.obj_ptrs.size();
-	GeometricObject* nearest_object;
+	Object* nearest_object;
 	for (int i = 0; i < num_objects; i++)
 	{
 		if (world.obj_ptrs[i]->hit(ray, t, sr) && t < tmin)
@@ -148,6 +184,7 @@ PinHole::cast_ray(const Ray& ray)
 			normal = sr.normal;
 		}
 	}
+
 	if (sr.hit_an_object)
 	{
 		sr.t = tmin;
@@ -160,49 +197,16 @@ PinHole::cast_ray(const Ray& ray)
 }
 
 RGBColor
-PinHole::trace_ray(const Ray& ray)
-{
-	ShadeRec sr;
-	sr.color = BLACK;
-	float t;
-	Normal normal;
-	Point3D local_hit_point;
-	float tmin = FLT_MAX;
-	int num_objects = world.obj_ptrs.size();
-	GeometricObject* nearest_object;
-	for (int i = 0; i < num_objects; i++)
-	{
-		if (world.obj_ptrs[i]->hit(ray, t, sr) && t < tmin)
-		{
-			sr.hit_an_object = true;
-			tmin = t;
-			sr.hit_point = ray.o + ray.d * t;
-			nearest_object = world.obj_ptrs[i];
-			local_hit_point = sr.local_hit_point;
-			normal = sr.normal;
-		}
-	}
-	if (sr.hit_an_object)
-	{
-		sr.t = tmin;
-		sr.normal = normal;
-		sr.local_hit_point = local_hit_point;
-		sr.ray = ray;
-		sr.color = nearest_object->material_ptr->area_light_shade(sr);
-	}
-	return sr.color;
-}
-
-RGBColor
-PinHole::trace_path(const Ray& ray, int depth)
+Camera::trace_path(const Ray& ray, const int depth)
 {
 	if (depth >= MAX_DEPTH)
-		return WHITE;
+		return BLACK;
+
 	ShadeRec sr;
 	Normal normal;
 	Point3D local_hit_point;
 	float tmin = FLT_MAX, t;
-	GeometricObject *nearest_object;
+	Object *nearest_object;
 	size_t num_objects = world.obj_ptrs.size();
 	for (int i = 0; i < num_objects; i++)
 	{
@@ -216,6 +220,7 @@ PinHole::trace_path(const Ray& ray, int depth)
 			normal = sr.normal;
 		}
 	}
+
 	if (sr.hit_an_object)
 	{
 		sr.t = tmin;
@@ -226,12 +231,45 @@ PinHole::trace_path(const Ray& ray, int depth)
 		RGBColor traced_color = nearest_object->material_ptr->path_shade(sr);
 		Ray reflected_ray(sr.hit_point, sr.reflected_dir);
 		return traced_color * trace_path(reflected_ray, depth + 1) + sr.color;
-		// return traced_color * trace_path(reflected_ray, depth + 1);
 	}
-	else
+	return world.background_color;
+}
+
+RGBColor
+Camera::trace_path_global(const Ray& ray, const int depth)
+{
+	if (depth >= MAX_DEPTH)
+		return BLACK;
+	ShadeRec sr;
+	Normal normal;
+	Point3D local_hit_point;
+	float tmin = FLT_MAX, t;
+	Object *nearest_object;
+	size_t num_objects = world.obj_ptrs.size();
+	for (int i = 0; i < num_objects; i++)
 	{
-		/* TODO: return background color */
-		return WHITE;
+		if (world.obj_ptrs[i]->hit(ray, t, sr) && t < tmin)
+		{
+			sr.hit_an_object = true;
+			tmin = t;
+			sr.hit_point = ray.o + ray.d * t;
+			nearest_object = world.obj_ptrs[i];
+			local_hit_point = sr.local_hit_point;
+			normal = sr.normal;
+		}
 	}
 
+	if (sr.hit_an_object)
+	{
+		sr.t = tmin;
+		normal.normalize();
+		sr.normal = normal;
+		sr.local_hit_point = local_hit_point;
+		sr.ray = ray;
+		/* TODO: change path_shade to global_shade */
+		RGBColor traced_color = nearest_object->material_ptr->path_shade(sr);
+		Ray reflected_ray(sr.hit_point, sr.reflected_dir);
+		return traced_color * trace_path(reflected_ray, depth + 1);
+	}
+	return world.background_color;
 }

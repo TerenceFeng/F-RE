@@ -11,7 +11,7 @@
 
 #include "BBox.h"
 #include "Utilities.h"
-#include "GeometricObject.h"
+#include "Object.h"
 
 class Mesh
 {
@@ -43,7 +43,7 @@ public:
 	void read_ply_file(char *);
 
 private:
-	std::vector<GeometricObject*> cells;
+	std::vector<Object*> cells;
 	BBox bbox;
 	int nx, ny, nz;
 	Mesh *mesh_ptr;
@@ -52,7 +52,7 @@ private:
 	Point3D max_coordinate(void);
 };
 
-class MeshTriangle: public GeometricObject
+class MeshTriangle: public Object
 {
 public:
 	MeshTriangle(void);

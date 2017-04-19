@@ -1,9 +1,7 @@
-
 /* ====================================================
 #   Author        : Terence (Yongxin) Feng
 #   Email         : tyxfeng@gmail.com
 #   File Name     : ShadeRec.cpp
-#   Last Modified : 2017-03-21 20:15
 # ====================================================*/
 
 #include "ShadeRec.h"

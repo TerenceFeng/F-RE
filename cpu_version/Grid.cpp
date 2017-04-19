@@ -120,6 +120,7 @@ Grid::hit(const Ray& ray, float& t, ShadeRec& sr)
 	/* initial cell coordinates */
 	int ix, iy, iz;
 
+
 	if (bbox.inside(ray.o)) {
 		ix = clamp((ox - x0) * nx / (x1 - x0), 0, nx - 1);
 		iy = clamp((oy - y0) * ny / (y1 - y0), 0, ny - 1);
@@ -195,13 +196,13 @@ Grid::hit(const Ray& ray, float& t, ShadeRec& sr)
 
 	/* traverse the grid */
 	while (true) {
-		GeometricObject* object_ptr = cells[ix + nx * iy + nx * ny * iz];
+		Object* object_ptr = cells[ix + nx * iy + nx * ny * iz];
 
 		if (tx_next < ty_next && tx_next < tz_next)
 		{
 			if (object_ptr && object_ptr->hit(ray, t, sr) && t < tx_next)
 			{
-				material_ptr = object_ptr->get_material();
+				material_ptr = object_ptr->material_ptr;
 				return (true);
 			}
 			tx_next += dtx;
@@ -215,7 +216,7 @@ Grid::hit(const Ray& ray, float& t, ShadeRec& sr)
 			{
 				if (object_ptr && object_ptr->hit(ray, t, sr) && t < ty_next)
 				{
-					material_ptr = object_ptr->get_material();
+					material_ptr = object_ptr->material_ptr;
 					return (true);
 				}
 				ty_next += dty;
@@ -227,7 +228,7 @@ Grid::hit(const Ray& ray, float& t, ShadeRec& sr)
 			{
 				if (object_ptr && object_ptr->hit(ray, t, sr) && t < tz_next)
 				{
-					material_ptr = object_ptr->get_material();
+					material_ptr = object_ptr->material_ptr;
 					return (true);
 				}
 				tz_next += dtz;
@@ -431,7 +432,7 @@ Grid::setup_cells(void)
 	BBox obj_bbox;
 	int index;
 
-	for (GeometricObject *obj_ptr: object_ptrs)
+	for (Object *obj_ptr: object_ptrs)
 	{
 		obj_bbox = obj_ptr->get_bounding_box();
 
@@ -482,7 +483,7 @@ Grid::min_coordinate(void)
 	BBox obj_bbox;
 	Point3D p0(FLT_MAX);
 
-	for (GeometricObject *obj_ptr: object_ptrs)
+	for (Object *obj_ptr: object_ptrs)
 	{
 		obj_bbox = obj_ptr->get_bounding_box();
 		if (obj_bbox.x0 < p0.x) p0.x = obj_bbox.x0;
@@ -499,7 +500,7 @@ Grid::max_coordinate(void)
 {
 	BBox obj_bbox;
 	Point3D p1(FLT_MIN);
-	for (GeometricObject *obj_ptr: object_ptrs)
+	for (Object *obj_ptr: object_ptrs)
 	{
 		obj_bbox = obj_ptr->get_bounding_box();
 		if (obj_bbox.x1 > p1.x) p1.x = obj_bbox.x1;
@@ -516,7 +517,7 @@ MeshTriangle::MeshTriangle(void)
 {}
 
 MeshTriangle::MeshTriangle(Mesh *mesh_ptr_, const int i0, const int i1, const int i2):
-	GeometricObject(),
+	Object(),
 	mesh_ptr(mesh_ptr_),
 	index0(i0), index1(i1), index2(i2)
 {

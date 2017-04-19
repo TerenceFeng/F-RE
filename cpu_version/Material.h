@@ -15,20 +15,24 @@
 #include "ShadeRec.h"
 #include <vector>
 
-class GeometricObject;
+class Object;
+
 class Material
 {
 public:
 
+	Material();
 	virtual ~Material();
-	virtual Material& operator = (const Material& rhs);
 
-	virtual RGBColor shade(ShadeRec&) const = 0;
-	virtual RGBColor area_light_shade(ShadeRec&) const = 0;
-	virtual RGBColor path_shade(ShadeRec&) const = 0;
+	virtual RGBColor area_light_shade(ShadeRec&) const;
+	virtual RGBColor path_shade(ShadeRec&) const;
 
 	virtual RGBColor get_Le(ShadeRec& sr) const;
 
+	virtual void set_color(const RGBColor&);
+
+protected:
+	RGBColor color;
 };
 
 class Matte: public Material
@@ -40,23 +44,20 @@ public:
 
 	void set_ka(const float);
 	void set_kd(const float);
-	void set_cd(const RGBColor&);
+	void set_color(const RGBColor&);
 
-	virtual RGBColor shade(ShadeRec&) const;
 	virtual RGBColor area_light_shade(ShadeRec&) const;
 	virtual RGBColor path_shade(ShadeRec&) const;
 
 private:
 	Lambertian *ambient_brdf;
 	Lambertian *diffuse_brdf;
-	RGBColor cd;
 };
 
 class Phong: public Material
 {
 public:
 	Phong(void);
-	virtual RGBColor shade(ShadeRec&) const;
 	virtual RGBColor area_light_shade(ShadeRec&) const;
 	virtual RGBColor path_shade(ShadeRec&) const;
 
@@ -64,12 +65,11 @@ public:
 	void set_kd(const float kd_);
 	void set_ks(const float ks_);
 	void set_es(const float es_);
-	void set_cd(const RGBColor cd_);
+	void set_color(const RGBColor);
 protected:
 	Lambertian *ambient_brdf;
 	Lambertian *diffuse_brdf;
 	GlossySpecular *specular_brdf;
-	RGBColor cd;
 };
 
 class Emissive: public Material
@@ -78,13 +78,11 @@ public:
 	Emissive(void);
 	Emissive(int, const RGBColor&);
 
-	virtual RGBColor shade(ShadeRec&) const;
 	virtual RGBColor area_light_shade(ShadeRec& sr) const;
 	virtual RGBColor path_shade(ShadeRec& sr) const;
 	virtual RGBColor get_Le(ShadeRec& sr) const;
 private:
 	float ls; /* radiance scaling factor */
-	RGBColor ce; /* color */
 };
 
 class Reflective: public Phong
@@ -92,10 +90,11 @@ class Reflective: public Phong
 public:
 	Reflective(void);
 	Reflective(const float ka_, const float kd_, const float ks_, const float kr_, const float es_, const RGBColor& cd_, const RGBColor& cr_);
+	void set_color(const RGBColor&);
+	void set_kr(const float kr_);
+
 	virtual RGBColor area_light_shade(ShadeRec&) const;
 	virtual RGBColor path_shade(ShadeRec&) const;
-	void set_cr(const RGBColor& cr_);
-	void set_kr(const float kr_);
 private:
 	PerfectSpecular *reflective_brdf;
 };
@@ -106,7 +105,8 @@ public:
 	GlossyReflective(void);
 	void set_kr(const float);
 	void set_exponent(const float);
-	void set_cr(const RGBColor&);
+	void set_color(const RGBColor&);
+
 	virtual RGBColor area_light_shade(ShadeRec& sr) const;
 	virtual RGBColor path_shade(ShadeRec& sr) const;
 private:

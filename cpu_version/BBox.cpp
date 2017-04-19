@@ -6,7 +6,6 @@
 # ====================================================*/
 
 #include "BBox.h"
-#include "Utilities.h"
 
 /* NOTE: implementation of BBox (Bounded Box) */
 BBox::BBox(void):

@@ -5,7 +5,7 @@
 #   Last Modified : 2017-03-21 20:18
 # ====================================================*/
 
-#include "GeometricObject.h"
+#include "Object.h"
 #include "ShadeRec.h"
 #include "sampler.h"
 #include <cmath>
@@ -20,25 +20,24 @@ clamp(float x, float min, float max)
 	return (x < min ? min : (x > max ? max : x));
 }
 
-/* NOTE: Implementation of GeometricObject */
-GeometricObject::GeometricObject(void) {}
+/* NOTE: Implementation of Object */
+Object::Object(void) {}
 
-GeometricObject::~GeometricObject(void)
+Object::~Object(void)
 {	delete material_ptr; }
 
 Point3D
-GeometricObject::sample(void)
+Object::sample(void)
 {	return Point3D();}
 float
-GeometricObject::pdf(ShadeRec&)
+Object::pdf(ShadeRec&)
 {	return 1; }
 Normal
-GeometricObject::get_normal(const Point3D&)
+Object::get_normal(const Point3D&)
 {	return Normal(); }
 
 /* NOTE: Implementation of Sphere */
 Sphere::Sphere(): center(), radius(0.0f) {}
-Sphere::Sphere(const Point3D& ct, float r): center(ct), radius(r) {}
 Sphere::Sphere(const Point3D& ct, float r, const RGBColor& c):
 	center(ct),
 	radius(r)
@@ -77,34 +76,12 @@ Sphere::hit(const Ray& ray, float& tmin, ShadeRec& sr)
 	}
 	return false;
 }
+
 bool
 Sphere::shadow_hit(const Ray& ray, float& tmin)
 {
-	float t;
-	Vector3D temp = ray.o - center;
-	float a = ray.d * ray.d;
-	float b = ray.d * 2.0f * temp;
-	float c = temp * temp - radius * radius;
-	float disc = b * b - 4.0f * a * c;
-
-	if (disc < 0)
-		return false;
-	else {
-		float e = sqrtf(disc);
-		float denom = 2.0 * a;
-		t = (-b - e) / denom;
-		if (t > eps) {
-			tmin = t;
-			return true;
-		}
-
-		t = (-b + e) / denom;
-		if (t > eps) {
-			tmin = t;
-			return true;
-		}
-	}
-	return false;
+	ShadeRec dummy_sr;
+	return hit(ray, tmin, dummy_sr);
 }
 
 BBox
@@ -116,8 +93,6 @@ Sphere::get_bounding_box(void)
 }
 
 void
-Sphere::set_center(float f) { center = Point3D(f); }
-void
 Sphere::set_center(float x, float y, float z) { center = Point3D(x, y, z); }
 void
 Sphere::set_radius(float r) { radius = r; }
@@ -126,8 +101,10 @@ Sphere::set_radius(float r) { radius = r; }
 /* NOTE: Implementation of Plane */
 Plane::Plane(): point(Point3D()), normal(Normal()) {}
 Plane::Plane(const Point3D p, const Normal& n): point(p), normal(n) {}
-Plane::Plane(const Point3D p, const Normal& n, const RGBColor c, float kd): point(p), normal(n) {
-}
+Plane::Plane(const Point3D p, const Normal& n, const RGBColor c, float kd):
+	point(p),
+	normal(n)
+{}
 
 bool
 Plane::hit(const Ray& ray, float& tmin, ShadeRec& sr)
@@ -144,12 +121,8 @@ Plane::hit(const Ray& ray, float& tmin, ShadeRec& sr)
 bool
 Plane::shadow_hit(const Ray& ray, float& tmin)
 {
-	float t = (point - ray.o) * normal / (ray.d * normal);
-	if (t > eps) {
-		tmin = t;
-		return true;
-	}
-	return false;
+	ShadeRec sr;
+	return hit(ray, tmin, sr);
 }
 
 BBox
@@ -161,10 +134,10 @@ Plane::get_bounding_box(void)
 
 /* NOTE: implementation of Rectangle */
 Rectangle::Rectangle():
-	GeometricObject()
+	Object()
 {}
 Rectangle::Rectangle(const Point3D& p0_, const Vector3D& a_, const Vector3D& b_):
-	GeometricObject(),
+	Object(),
 	p0(p0_),
 	a(a_),
 	b(b_)
@@ -206,30 +179,8 @@ Rectangle::hit(const Ray& ray, float& tmin, ShadeRec& sr)
 bool
 Rectangle::shadow_hit(const Ray& ray, float& tmin)
 {
-	float t = (p0 - ray.o) * normal / (ray.d * normal);
-	if (t <= eps)
-		return false;
-
-	Point3D p = ray.o + ray.d * t;
-	Vector3D d = p - p0;
-
-	float ddota = d * a;
-	if (ddota < 0.0 || ddota > a_len_2)
-		return false;
-
-	float ddotb = d * b;
-	if (ddotb < 0.0 || ddotb > b_len_2)
-		return false;
-
-	tmin = t;
-
-	return true;
-}
-
-void
-Rectangle::set_sampler(Sampler *sampler_ptr_)
-{
-	sampler_ptr = sampler_ptr_;
+	ShadeRec dummy_sr;
+	return hit(ray, tmin, dummy_sr);
 }
 
 BBox
@@ -330,39 +281,8 @@ Triangle::hit(const Ray& ray, float& tmin, ShadeRec& sr)
 bool
 Triangle::shadow_hit(const Ray& ray, float& tmin)
 {
-	float a = v0.x - v1.x, b = v0.x - v2.x, c = ray.d.x, d = v0.x - ray.o.x;
-	float e = v0.y - v1.y, f = v0.y - v2.y, g = ray.d.y, h = v0.y - ray.o.y;
-	float i = v0.z - v1.z, j = v0.z - v2.z, k = ray.d.z, l = v0.z - ray.o.z;
-
-	float m = f * k - g * j, n = h * k - g * l, p = f * l - h * j;
-	float q = g * i - e * k, s = e * j - f * i;
-
-	float inv_denom = 1.0 / (a * m + b * q + c * s);
-
-	float e1 = d * m - b * n - c * p;
-	float beta = e1 * inv_denom;
-
-	if (beta < 0)
-		return false;
-
-	float r = e * l - h * i;
-	float e2 = a * n + d * q + c * r;
-	float gamma = e2 * inv_denom;
-
-	if (gamma < 0)
-		return false;
-
-	if (beta + gamma > 1)
-		return false;
-
-	float e3 = a * p - b * r + d * s;
-	float t = e3 * inv_denom;
-
-	if (t < eps)
-		return false;
-
-	tmin = t;
-	return true;
+	ShadeRec dummy_sr;
+	return hit(ray, tmin, dummy_sr);
 }
 
 BBox
@@ -389,12 +309,12 @@ void
 Compound::set_material(Material* m_ptr_)
 {
 	material_ptr = m_ptr_;
-	for (GeometricObject* obj_ptr: object_ptrs)
+	for (Object* obj_ptr: object_ptrs)
 		obj_ptr->set_material(m_ptr_);
 }
 
 void
-Compound::add_object(GeometricObject* obj_ptr_)
+Compound::add_object(Object* obj_ptr_)
 {
 	object_ptrs.push_back(obj_ptr_);
 }
@@ -408,14 +328,14 @@ Compound::hit(const Ray& ray, float& tmin, ShadeRec& sr)
 	Point3D local_hit_point;
 	tmin = FLT_MAX;
 
-	for (GeometricObject* obj_ptr: object_ptrs)
+	for (Object* obj_ptr: object_ptrs)
 	{
 		if (obj_ptr->hit(ray, t, sr) && (t < tmin))
 		{
 			hit = true;
 			tmin = t;
 			normal = sr.normal;
-			material_ptr = obj_ptr->get_material();
+			material_ptr = obj_ptr->material_ptr;
 			local_hit_point = sr.local_hit_point;
 		}
 	}
@@ -432,25 +352,8 @@ Compound::hit(const Ray& ray, float& tmin, ShadeRec& sr)
 bool
 Compound::shadow_hit(const Ray& ray, float& tmin)
 {
-	float t;
-	tmin = FLT_MAX;
-	bool hit = false;
-	Normal normal;
-	Point3D local_hit_point;
-
-	for (GeometricObject* obj_ptr: object_ptrs)
-	{
-		if (obj_ptr->shadow_hit(ray, t) && (t < tmin))
-		{
-			hit = true;
-			tmin = t;
-		}
-	}
-	if (hit)
-	{
-		return true;
-	}
-	return false;
+	ShadeRec dummy_sr;
+	return hit(ray, tmin, dummy_sr);
 }
 
 BBox
@@ -460,7 +363,7 @@ Compound::get_bounding_box(void)
 	using namespace std;
 	float x0 = FLT_MAX, y0 = FLT_MAX, z0 = FLT_MAX;
 	float x1 = FLT_MIN, y1 = FLT_MIN, z1 = FLT_MIN;
-	for (GeometricObject* obj_ptr: object_ptrs)
+	for (Object* obj_ptr: object_ptrs)
 	{
 		bbox = obj_ptr->get_bounding_box();
 		if (bbox.x0 < x0) x0 = bbox.x0;
