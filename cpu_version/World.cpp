@@ -1,29 +1,15 @@
 
 /* ====================================================
-#   Copyright (C)2017 All rights reserved.
-#
 #   Author        : Terence (Yongxin) Feng
 #   Email         : tyxfeng@gmail.com
 #   File Name     : World.cpp
 #   Last Modified : 2017-03-21 17:09
-#   Describe      :
-#
-#   Log           :
-#
 # ====================================================*/
 
 #include "World.h"
 
-#include <fcntl.h>
-#include <errno.h>
-#include <cstdio>
-#include <cfloat>
-#include <cstring>
-#include <iostream>
-using namespace std;
-
 World::World(void):
-	background_color(black)
+	background_color(BLACK)
 {}
 
 World::~World(void)
@@ -31,8 +17,6 @@ World::~World(void)
 	for (int i = 0; i < obj_ptrs.size(); i++) {
 		delete obj_ptrs[i];
 	}
-	/* if (ambient_ptr) */
-	   //  delete ambient_ptr;
 	for (int i = 0; i < light_ptrs.size(); i++) {
 		delete light_ptrs[i];
 	}
@@ -40,7 +24,7 @@ World::~World(void)
 
 void
 World::
-add_object(GeometricObject* obj_ptr)
+add_object(Object* obj_ptr)
 {
 	obj_ptrs.push_back(obj_ptr);
 }

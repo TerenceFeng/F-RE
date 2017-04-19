@@ -18,7 +18,7 @@
 #include "Light.h"
 #include "RGBColor.h"
 #include "Utilities.h"
-#include "GeometricObject.h"
+#include "Object.h"
 
 #include <vector>
 
@@ -26,15 +26,15 @@ class World
 {
 public:
 	RGBColor background_color;
-	AmbientOccluder* ambient_ptr;
-	std::vector<GeometricObject*> obj_ptrs;
-	std::vector<Light*> light_ptrs;
+	std::vector<Object *> obj_ptrs;
+	std::vector<Light *> light_ptrs;
+	AmbientOccluder *ambient_ptr;
 
 	World(void);
 	~World(void);
 
-	void add_object(GeometricObject* obj);
-	void add_light(Light* light_ptr);
+	void add_object(Object *obj);
+	void add_light(Light *light_ptr);
 
 };
 

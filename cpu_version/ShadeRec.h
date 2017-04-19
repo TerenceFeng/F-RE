@@ -1,15 +1,8 @@
 
 /* ====================================================
-#   Copyright (C)2017 All rights reserved.
-#
 #   Author        : Terence (Yongxin) Feng
 #   Email         : tyxfeng@gmail.com
 #   File Name     : ShadeRec.h
-#   Last Modified : 2017-03-21 20:14
-#   Describe      :
-#
-#   Log           :
-#
 # ====================================================*/
 
 #ifndef  _SHADEREC_H

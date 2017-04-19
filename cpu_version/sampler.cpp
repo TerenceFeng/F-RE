@@ -7,6 +7,7 @@
 # ====================================================*/
 
 #include "sampler.h"
+#include <ctime>
 #include <cstdlib>
 #include <algorithm>
 
@@ -15,7 +16,7 @@
 float
 rand_float()
 {
-	return (float)rand() / (float)(RAND_MAX);
+	return (float)(rand() + clock()) / (float)(RAND_MAX);
 }
 
 Sampler::Sampler():
@@ -130,29 +131,6 @@ Sampler::map_samples_to_hemisphere(const float e = 1)
 											 sin_theta * sin_phi,
 											 cos_theta));
 	}
-}
-
-/* Implementation of Jittered */
-Jittered::Jittered():
-	Sampler(0)
-{}
-Jittered::Jittered(int num_samples_):
-	Sampler(num_samples_)
-{
-	generate_samples();
-}
-
-void
-Jittered::generate_samples(void)
-{
-	int n = (int)sqrtf(num_samples) + 1;
-	for (int p = 0; p < num_sets; p++)
-		for (int j = 0; j < n; j++)
-			for (int k = 0; k < n; k++)
-			{
-				Point2D sp((k + rand_float()) / n, (j + rand_float() / n));
-				samples.push_back(sp);
-			}
 }
 
 /* inplementation of NRooks */

@@ -1,16 +1,10 @@
 
 /* ====================================================
-#   Copyright (C)2017 All rights reserved.
-#
 #   Author        : Terence (Yongxin) Feng
 #   Email         : tyxfeng@gmail.com
 #   File Name     : RGBColor.h
 #   Last Modified : 2017-03-24 16:58
-#   Describe      :
-#
-#   Log           :
-#
-# ====================================================*/
+#  ====================================================*/
 
 #ifndef  _RGBCOLOR_H
 #define  _RGBCOLOR_H
@@ -82,22 +76,15 @@ public:
 							g / f,
 							b / f);
 		}
-
-	/*
-	 * inline friend RGBColor
-	 *     operator * (const RGBColor& color, const float k) {
-	 *         return RGBColor(color.r * k, color.g * k, color.b * k);
-	 *     }
-	 */
-
 };
 
 /* constants */
-const RGBColor black(0.0f);
-const RGBColor red(1.0f, 0.0f, 0.0f);
-const RGBColor BLACK(0.0f);
-const RGBColor RED(1.0f, 0.0f, 0.0f);
+const RGBColor BLACK(0.0);
+const RGBColor WHITE(1.0);
+const RGBColor RED(1.0, 0.0, 0.0);
+const RGBColor GREEN(0.0, 1.0, 0.0);
+const RGBColor BLUE(0.0, 0.0, 1.0);
 
-#endif // _RGBCOLOR_H
+#endif
 
 

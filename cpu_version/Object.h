@@ -4,8 +4,8 @@
 #   File Name     : Object.h
 # ====================================================*/
 
-#ifndef  _GEOMETRICOBJECT_H
-#define  _GEOMETRICOBJECT_H
+#ifndef _OBJECT_H
+#define _OBJECT_H
 
 #include <vector>
 #include "BBox.h"
@@ -16,19 +16,20 @@
 
 class Sampler;
 
-class GeometricObject
+class Object
 {
 protected:
 	const float eps = 1e-4;
 
 public:
 	Material *material_ptr;
+	Sampler *sampler_ptr;
 
-	GeometricObject(void);
-	virtual ~GeometricObject(void);
+	Object(void);
+	virtual ~Object(void);
 
-	inline void set_material(Material *m_ptr_) {material_ptr= m_ptr_;}
-	inline Material* get_material() { return material_ptr; }
+	inline void set_material(Material *m_ptr_) { material_ptr = m_ptr_; }
+	inline void set_sampler(Sampler *s_ptr_) {sampler_ptr = s_ptr_; }
 
 	virtual bool hit(const Ray& r, float& tmin, ShadeRec& sr) = 0;
 	virtual bool shadow_hit(const Ray& ray, float& tmin) = 0;
@@ -41,17 +42,16 @@ public:
 
 };
 
-class Sphere: public GeometricObject
+class Sphere: public Object
 {
 public:
 
 	Sphere();
-	Sphere(const Point3D& ct, float r);
+	/* center radius color */
 	Sphere(const Point3D& ct, float r, const RGBColor& c);
 
 	bool hit(const Ray& ray, float& tmin, ShadeRec& sr);
 	bool shadow_hit(const Ray& ray, float& tmin);
-	void set_center(float f);
 	void set_center(float x, float y, float z);
 	void set_radius(float r);
 	virtual BBox get_bounding_box(void);
@@ -59,10 +59,9 @@ public:
 private:
 	Point3D center;
 	float radius;
-	const float eps = 1e-2;
 };
 
-class Plane: public GeometricObject
+class Plane: public Object
 {
 public:
 	Plane();
@@ -70,23 +69,21 @@ public:
 	Plane(const Point3D p, const Normal& n, const RGBColor c, float kd);
 	bool hit(const Ray& ray, float& tmin, ShadeRec& sr);
 	bool shadow_hit(const Ray& ray, float& tmin);
-	virtual BBox get_bounding_box(void);
+	BBox get_bounding_box(void);
 
 private:
 	Point3D point;
 	Normal normal;
-	const float eps = 1e-2;
 };
 
-class Rectangle: public GeometricObject
+class Rectangle: public Object
 {
 public:
 	Rectangle();
 	Rectangle(const Point3D&, const Vector3D&, const Vector3D&);
-	void set_sampler(Sampler *);
-	virtual Point3D sample(void);
-	virtual float pdf(ShadeRec& sr);
-	virtual Normal get_normal(const Point3D&);
+	Point3D sample(void);
+	float pdf(ShadeRec& sr);
+	Normal get_normal(const Point3D&);
 	bool hit(const Ray&, float&, ShadeRec&);
 	bool shadow_hit(const Ray&, float&);
 	virtual BBox get_bounding_box(void);
@@ -97,11 +94,10 @@ private:
 	float a_len, b_len;
 	float a_len_2, b_len_2;
 	Normal normal;
-	Sampler *sampler_ptr;
 	float inv_area;
 };
 
-class Triangle: public GeometricObject
+class Triangle: public Object
 {
 public:
 	Point3D v0, v1, v2;
@@ -114,17 +110,17 @@ public:
 	virtual BBox get_bounding_box(void);
 };
 
-class Compound: public GeometricObject
+class Compound: public Object
 {
 public:
 	Compound(void);
 	virtual void set_material(Material* material_ptr_);
-	void add_object(GeometricObject* obj_ptr_);
-	virtual bool hit(const Ray&, float&, ShadeRec&);
-	virtual bool shadow_hit(const Ray&, float&);
+	void add_object(Object* obj_ptr_);
+	bool hit(const Ray&, float&, ShadeRec&);
+	bool shadow_hit(const Ray&, float&);
 
-	virtual BBox get_bounding_box(void);
+	BBox get_bounding_box(void);
 protected:
-	std::vector<GeometricObject*> object_ptrs;
+	std::vector<Object*> object_ptrs;
 };
 #endif

@@ -12,6 +12,8 @@
 #include "RGBColor.h"
 #include "Utilities.h"
 
+#include <vector>
+
 class World;
 class ShadeRec;
 extern World world;
@@ -20,16 +22,23 @@ class Camera
 {
 public:
 	Camera();
-	Camera(Point3D, Point3D);
-	Camera(Point3D, Point3D, float);
+	Camera(const Point3D& position_, const Point3D& lookat );
+	Camera(const Point3D& position_, const Point3D& lookat_, const Vector3D& up, const float exp_time_,  const float d_, const float zoom);
 	void compute_uvw(void);
 	void set_viewplane(int h_, int w_, float s_);
-	void set_up(int a, int b, int c);
+	void set_up(const Vector3D&);
 
-	virtual void render_scene() = 0;
-	virtual RGBColor cast_ray(const Ray&) = 0;
-	virtual RGBColor trace_ray(const Ray&) = 0;
-	virtual RGBColor trace_path(const Ray&, int) = 0;
+	void render_scene();
+	Vector3D ray_direction(const float& xv, const float& yv) const;
+public:
+	RGBColor cast_ray(const Ray&);
+	RGBColor trace_ray(const Ray&);
+	RGBColor trace_path(const Ray&, const int);
+	RGBColor trace_path_global(const Ray&, const int);
+
+protected:
+	void add_pixel(int r, int c, RGBColor& color);
+	void print();
 
 protected:
 	Point3D position;
@@ -38,26 +47,14 @@ protected:
 	Vector3D u, v, w;
 	float exposure_time;
 	/* view plane */
-	float width = 200, height = 200;
-	float s = 1; /* size of pixel */
-
-};
-
-class PinHole: public Camera
-{
-public:
-	PinHole();
-	PinHole(Point3D position_, Point3D lookat_, float exp_time_, float d_, float zoom);
-	Vector3D ray_direction(const float& xv, const float& yv) const;
-
-	virtual void render_scene();
-private:
+	int width, height;
+	float s; /* size of pixel */
 	float d; /* view plane distance */
 	float zoom;
-	virtual RGBColor cast_ray(const Ray&);
-	virtual RGBColor trace_ray(const Ray&);
-	virtual RGBColor trace_path(const Ray&, int);
-	RGBColor trace_path(const Ray&, ShadeRec&);
+
+	/* printer */
+	std::vector<std::vector<float>> pixels;
+	float maxval;
 };
 
 #endif
