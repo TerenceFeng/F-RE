@@ -1,15 +1,20 @@
 #pragma once
 
-// class Light {};
+class Light
+{
+   public:
+    virtual Color Sample_L(const Point &p, Vector *wi, float *pdf) const = 0;
+    virtual Vector getDirection(const Point &hit) const = 0;
+};
 
-class PointLight  //: public Light
+class PointLight : public Light
 {
    private:
-    Vertex lightPos;
+    Point lightPos;
     Color intensity;
 
    public:
-    PointLight(const Vertex &pos, const Color &_intensity)
+    PointLight(const Point &pos, const Color &_intensity)
         : lightPos(pos), intensity(_intensity)
     {
     }
@@ -28,10 +33,15 @@ class PointLight  //: public Light
     // XXX: 入射方向直接计算
     // XXX: pdf 直接为 1
     // 用于计算物体表面亮度
-    Color Sample_L(const Vertex &p, Vector *wi, float *pdf)
+    virtual Color Sample_L(const Point &p, Vector *wi, float *pdf) const
     {
-        *wi = Vertex::Norm(lightPos - p);
-        *pdf = 1.f;
-        return Vertex::Scale(intensity.v, 1.f / DistanceSquared(lightPos, p));
+        // *wi = Point::Norm(lightPos - p);
+        // *pdf = 1.f;
+        return Point::Scale(intensity.v, 1.f / DistanceSquared(lightPos, p));
+    }
+
+    virtual Vector getDirection(const Point &hit) const
+    {
+        return (lightPos - hit).norm();
     }
 };

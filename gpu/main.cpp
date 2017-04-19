@@ -41,7 +41,7 @@ struct Color
     }
 };
 
-// #include "BRDF.h"  // Material: BSDF
+#include "BRDF.h"  // Material: BSDF
 // Texture
 #include "light.h"
 #include "shape.h"
@@ -65,7 +65,11 @@ class Render
           color_buffer(nullptr),
           ray_buffer(nullptr),
           obj_buffer(nullptr),
-          pos_buffer(nullptr)
+          pos_buffer(nullptr),
+          nr_buffer(nullptr),
+          wi_buffer(nullptr),
+          wo_buffer(nullptr),
+          f_buffer(nullptr)
     {
     }
     void update(const Scene &scene, const Camera &cam)
@@ -78,21 +82,56 @@ class Render
             obj_buffer = new const Object *[dim[0] * dim[1]];
         if (!pos_buffer)
             pos_buffer = new Point[dim[0] * dim[1]];
-        // ComputeEngine::Dispatch(CPU, kernel_simple, color_buffer, dim,
-        // &scene, &cam);
+        if (!nr_buffer)
+            nr_buffer = new Normal[dim[0] * dim[1]];
+        if (!wi_buffer)
+            wi_buffer = new Vector[dim[0] * dim[1] * scene.lights.size()];
+        if (!wo_buffer)
+            wo_buffer = new Vector[dim[0] * dim[1]];
+        if (!f_buffer)
+            f_buffer = new Color[dim[0] * dim[1] * scene.lights.size()];
+
         fprintf(stderr, "shoot_ray()...\n");
         ComputeEngine::Dispatch(CPU, shoot_ray, ray_buffer, dim, &cam);
         fprintf(stderr, "\ncalc_obj_pos()...\n");
         size_t nobj = scene.objs.size();
         ComputeEngine::Dispatch(CPU, calc_obj_pos, obj_buffer, pos_buffer, dim,
-                                ray_buffer, scene.objs.data(),
-                                &nobj);
+                                ray_buffer, scene.objs.data(), &nobj);
+        fprintf(stderr, "\ncalc_normal()...\n");
+        ComputeEngine::Dispatch(CPU, calc_normal, nr_buffer, dim, pos_buffer,
+                                obj_buffer);
+        fprintf(stderr, "\ncalc_wi()...\n");
+        size_t nlight = scene.lights.size();
+        ComputeEngine::Dispatch(CPU, calc_wi, wi_buffer, dim, pos_buffer,
+                                (const Light **)scene.lights.data(), &nlight);
+        fprintf(stderr, "\ncalc_wo()...\n");
+        ComputeEngine::Dispatch(CPU, calc_wo, nr_buffer, dim, ray_buffer);
+        fprintf(stderr, "\ncalc_f()...\n");
+        ComputeEngine::Dispatch(CPU, calc_f, f_buffer, dim, nr_buffer,
+                                wi_buffer, wo_buffer, obj_buffer, &nlight);
+        fprintf(stderr, "\ncalc_color()...\n");
+        ComputeEngine::Dispatch(CPU, calc_color, color_buffer, dim, nr_buffer,
+                                wi_buffer, pos_buffer, f_buffer,
+                                (const Light **)scene.lights.data(), &nlight);
+        display("xxx.ppm");
         // debug
-        ComputeEngine::Dispatch(CPU, ray2color, color_buffer, dim, ray_buffer);
-        display("ray.ppm");
-        ComputeEngine::Dispatch(CPU, obj2color, color_buffer, dim, obj_buffer);
-        ComputeEngine::Dispatch(CPU, pos2color, color_buffer, dim, pos_buffer, obj_buffer);
-        display("hit.ppm");
+        // ComputeEngine::Dispatch(CPU, ray2color, color_buffer, dim,
+        // ray_buffer);
+        // display("ray.ppm");
+        // ComputeEngine::Dispatch(CPU, obj2color, color_buffer, dim,
+        // obj_buffer);
+        // display("object.ppm");
+        // ComputeEngine::Dispatch(CPU, pos2color, color_buffer, dim,
+        // pos_buffer, obj_buffer);
+        // display("hit.ppm");
+        // ComputeEngine::Dispatch(CPU, nr2color, color_buffer, dim, nr_buffer,
+        //                         obj_buffer);
+        // display("normal.ppm");
+        // ComputeEngine::Dispatch(CPU, wi2color, color_buffer, dim, wi_buffer,
+        //                         obj_buffer);
+        // display("wi0.ppm");
+        // ComputeEngine::Dispatch(CPU, f2color, color_buffer, dim, f_buffer);
+        // display("f.ppm");
     }
     void display(const char *filename)
     {
@@ -105,13 +144,14 @@ class Render
         Color maxv = {0.0f, 0.0f, 0.0f};
         for (size_t i = 0; i < w * h; ++i)
         {
-            maxv.r = fmax(maxv.r, c[i].r); maxv.g = fmax(maxv.g, c[i].g); maxv.b = fmax(maxv.b, c[i].b);
+            maxv.r = fmax(maxv.r, c[i].r);
+            maxv.g = fmax(maxv.g, c[i].g);
+            maxv.b = fmax(maxv.b, c[i].b);
         }
         for (size_t i = 0; i < w * h; ++i)
         {
             size_t p = (w - i % w - 1) + w * (h - i / w - 1);
-            fprintf(f, "%d %d %d ",
-                    (int)(clamp(c[p].r / maxv.r) * 255),
+            fprintf(f, "%d %d %d ", (int)(clamp(c[p].r / maxv.r) * 255),
                     (int)(clamp(c[p].g / maxv.g) * 255),
                     (int)(clamp(c[p].b / maxv.b) * 255));
         }
@@ -132,20 +172,24 @@ class Render
     Ray *ray_buffer;
     const Object **obj_buffer;
     Point *pos_buffer;
-    // Normal *nr_buffer;
-    // Vector *wi_buffer;
-    // Vector *wo_buffer;
+    Normal *nr_buffer;
+    Vector *wi_buffer;
+    Vector *wo_buffer;
+    Color *f_buffer;
 };
 
 void A_Ball(Scene *scene, Camera *cam)
 {
+    DiffuseReflection green({0.1f, 1.0f, 0.1f});
     Sphere ball(1.0f, {0.0f, 0.0f, 3.0f});
 
-    Object o = {new Sphere(ball)};
+    Object o = {new Sphere(ball), new DiffuseReflection(green)};
     scene->objs.push_back(o);
 
-    Camera c = {
-        {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0.5 * M_PI, 0.5 * M_PI};
+    scene->lights.push_back(
+        new PointLight({0.0f, 0.0f, -5.0f}, {0.2f, 0.5f, 0.0f}));
+
+    Camera c = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0.5 * M_PI, 0.5 * M_PI};
     *cam = c;
 }
 /*
@@ -200,7 +244,6 @@ int main(int argc, char *argv[])
     Render render(512, 512);
     // rendering loop
     render.update(scene, cam);
-    // render.display();
 
     return 0;
 };

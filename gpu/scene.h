@@ -5,7 +5,7 @@
 struct Object
 {
     Shape *shape;
-    // BxDF *bsdf;
+    BxDF *bsdf;
 };
 
 #include <vector>
@@ -14,7 +14,7 @@ class Scene
 {
    public:
     std::vector<Object> objs;
-    std::vector<PointLight *> lights;
+    std::vector<Light *> lights;
 };
 
 /* view */

@@ -23,7 +23,7 @@ class ComputeEngine
             for (auto &p : s)
             {
                 f(out, s, p, in1);
-                fprintf(stderr, "\r%lu/%lu", p[N - 1], s[N - 1]);
+                fprintf(stderr, "\r%lu/%lu", p[N - 1] + 1, s[N - 1]);
             }
         }
     }
@@ -37,7 +37,50 @@ class ComputeEngine
             for (auto &p : s)
             {
                 f(out, s, p, in1, in2);
-                fprintf(stderr, "\r%lu/%lu", p[N - 1], s[N - 1]);
+                fprintf(stderr, "\r%lu/%lu", p[N - 1] + 1, s[N - 1]);
+            }
+        }
+    }
+    template <typename F, size_t N, template <size_t> class MD, typename R,
+              typename P1, typename P2, typename P3>
+    static void Dispatch(EDevice device, F f, R *out, MD<N> &s, P1 *in1,
+                         P2 *in2, P3 *in3)
+    {
+        if (device == CPU)
+        {
+            for (auto &p : s)
+            {
+                f(out, s, p, in1, in2, in3);
+                fprintf(stderr, "\r%lu/%lu", p[N - 1] + 1, s[N - 1]);
+            }
+        }
+    }
+    template <typename F, size_t N, template <size_t> class MD, typename R,
+              typename P1, typename P2, typename P3, typename P4, typename P5>
+    static void Dispatch(EDevice device, F f, R *out, MD<N> &s, P1 *in1,
+                         P2 *in2, P3 *in3, P4 *in4, P5 *in5)
+    {
+        if (device == CPU)
+        {
+            for (auto &p : s)
+            {
+                f(out, s, p, in1, in2, in3, in4, in5);
+                fprintf(stderr, "\r%lu/%lu", p[N - 1] + 1, s[N - 1]);
+            }
+        }
+    }
+    template <typename F, size_t N, template <size_t> class MD, typename R,
+              typename P1, typename P2, typename P3, typename P4, typename P5,
+              typename P6>
+    static void Dispatch(EDevice device, F f, R *out, MD<N> &s, P1 *in1,
+                         P2 *in2, P3 *in3, P4 *in4, P5 *in5, P6 *in6)
+    {
+        if (device == CPU)
+        {
+            for (auto &p : s)
+            {
+                f(out, s, p, in1, in2, in3, in4, in5, in6);
+                fprintf(stderr, "\r%lu/%lu", p[N - 1] + 1, s[N - 1]);
             }
         }
     }
@@ -51,7 +94,7 @@ class ComputeEngine
             for (auto &p : s)
             {
                 f(out1, out2, s, p, in1, in2, in3);
-                fprintf(stderr, "\r%lu/%lu", p[N - 1], s[N - 1]);
+                fprintf(stderr, "\r%lu/%lu", p[N - 1] + 1, s[N - 1]);
             }
         }
     }

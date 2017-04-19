@@ -5,6 +5,7 @@ class Shape
 {
    public:
     virtual bool intersect(const Ray &r, float &tHit) const = 0;
+    virtual Normal getNormal(const Point &pos) const = 0;
 };
 
 class Sphere : public Shape
@@ -34,5 +35,9 @@ class Sphere : public Shape
                 tHit = b + det;
         }
         return tHit != 0.0f;
+    }
+    virtual Normal getNormal(const Point &pos) const
+    {
+        return (pos - center).norm();
     }
 };

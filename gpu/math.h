@@ -159,6 +159,11 @@ struct Vec3
 {
     T x, y, z;
 
+    bool isZero() const
+    {
+        return x == T(0) && y == T(0) && z == T(0);
+    }
+
     Vec3<T> &zero()
     {
         x = y = z = T(0);

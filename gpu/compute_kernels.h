@@ -1,8 +1,8 @@
 #pragma once
 
+#include <cassert>
 #include <cmath>
 #include <cstdlib>
-#include <cassert>
 
 /*
 static unsigned short Xi[] = { 0, 0, 0 };
@@ -218,59 +218,113 @@ void pos2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
     int y = pos[0], x = pos[1];
     int i = y * w + x;
     c[i].v.zero();
-    if (obj[i]) c[i].r = c[i].g = c[i].b = fabs(2.7f - hit[i].z);
+    if (obj[i])
+        c[i].r = c[i].g = c[i].b = fabs(2.7f - hit[i].z);
 }
 
-/*
 // collect normal
 void calc_normal(Normal *nr, const MDSpace<2> &dim, const MDPoint<2> &pos,
-        const Point *pos, const Object **obj)
+                 const Point *hit, const Object **obj)
 {
     int h = dim[0], w = dim[1];
     int y = pos[0], x = pos[1];
     int i = y * w + x;
-    if (obj[i]) nr[i] = obj[i]->getNormal(pos[i]);
+    nr[i].zero();
+    if (obj[i])
+        nr[i] = obj[i]->shape->getNormal(hit[i]);
+}
+void nr2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
+              const Normal *nr, const Object **obj)
+{
+    int h = dim[0], w = dim[1];
+    int y = pos[0], x = pos[1];
+    int i = y * w + x;
+    c[i].v.zero();
+    if (obj[i])
+    {
+        c[i].r = fabs(nr[i].x);
+        c[i].g = fabs(nr[i].y);
+        c[i].b = fabs(nr[i].z);
+    }
 }
 
 // collect wi
 // count(wi) = count(nr) * count(light)
 void calc_wi(Vector *wi, const MDSpace<2> &dim, const MDPoint<2> &pos,
-        const Point *pos, const Light *light, size_t nlight)
+             const Point *hit, const Light **light, const size_t *nlight)
 {
     int h = dim[0], w = dim[1];
     int y = pos[0], x = pos[1];
     int i = y * w + x;
-    wi = wi + nlight * i;
-    for (int L = 0; L < nlight; ++L)
-        wi[L] = light[L]->getDirection(pos[i]);
+    wi = wi + (*nlight) * i;
+    for (int L = 0; L < *nlight; ++L)
+        wi[L] = light[L]->getDirection(hit[i]);
+}
+void wi2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
+              const Vector *wi, const Object **obj)
+{
+    int h = dim[0], w = dim[1];
+    int y = pos[0], x = pos[1];
+    int i = y * w + x;
+    c[i].v.zero();
+    if (obj[i])
+    {
+        c[i].r = fabs(wi[i].x);
+        c[i].g = fabs(wi[i].y);
+        c[i].b = fabs(wi[i].z);
+    }
+}
+void calc_wo(Vector *wo, const MDSpace<2> &dim, const MDPoint<2> &pos,
+             const Ray *ray)
+{
+    int h = dim[0], w = dim[1];
+    int y = pos[0], x = pos[1];
+    int i = y * w + x;
+    wo[i] = Vector::Scale(ray[i].dir, -1.0f);
 }
 
 // brdf(n, wi, wo) -> f
 // count(f) = count(wi)
 void calc_f(Color *f, const MDSpace<2> &dim, const MDPoint<2> &pos,
-        const Normal *nr, const Vector *wi, const Vector *wo, const Object
-*object)
+            const Normal *nr, const Vector *wi, const Vector *wo,
+            const Object **obj, const size_t *nlight)
 {
     int h = dim[0], w = dim[1];
     int y = pos[0], x = pos[1];
     int i = y * w + x;
-    wi = wi + nlight * i;
-    f = f + nlight * i;
-    for (int L = 0; L < nlight; ++L)
+    if (obj[i])
     {
-        f[L] = object[i]->bsdf->Sample_f(nr[i], wi[L], wo[i]);
+        wi = wi + (*nlight) * i;
+        f = f + (*nlight) * i;
+        for (int L = 0; L < (*nlight); ++L)
+        {
+            f[L] = obj[i]->bsdf->f(nr[i], wi[L], wo[i]);
+        }
     }
+}
+void f2color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
+             const Color *f)
+{
+    int h = dim[0], w = dim[1];
+    int y = pos[0], x = pos[1];
+    int i = y * w + x;
+    c[i] = f[i];
 }
 
 // f * L = color
-void calc_color(Color *c, const MDSpace<2> &dim, const MDPoint<2> &pos,
-        const Normal *nr, const Vector *wi,
-        const Color *f, const Light *light, size_t nlight)
+void calc_color(Color *color, const MDSpace<2> &dim, const MDPoint<2> &pos,
+                const Normal *nr, const Vector *wi, const Point *hit,
+                const Color *f, const Light **light, const size_t *nlight)
 {
     int h = dim[0], w = dim[1];
     int y = pos[0], x = pos[1];
     int i = y * w + x;
-    for (int L = 0; L < nlight; ++L)
-        c[i] += f[i] * light[L]->L() * nr[i]->dot(wi[i]);
+    Color c;
+    for (int L = 0; L < *nlight; ++L)
+    {
+        c = f[i];
+        c.v.mul(light[L]->Sample_L(hit[i], nullptr, nullptr).v)
+            .scale(nr[i].dot(wi[i]));
+        color[i].v += c.v;
+    }
 }
-*/
