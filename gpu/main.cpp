@@ -142,7 +142,8 @@ class Render
         //     display(name);
         // }
 
-        // ComputeEngine::Dispatch(CPU, f2color, color_buffer, dim, f_buffer);
+        // size_t n = 2;
+        // ComputeEngine::Dispatch(CPU, f2color, color_buffer, dim, f_buffer, &nlight, &n);
         // display("f.ppm");
     }
     void display(const char *filename)
@@ -152,22 +153,31 @@ class Render
         FILE *f;
         f = fopen(filename, "w");
         fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
+        // for (size_t i = 0; i < w * h; ++i)
+        // {
+        //     size_t p = (w - i % w - 1) + w * (h - i / w - 1);
+        //     fprintf(f, "%d %d %d ",
+        //             (int)(clamp(c[p].r) * 255),
+        //             (int)(clamp(c[p].g) * 255),
+        //             (int)(clamp(c[p].b) * 255));
+        // }
         // Scale
-        Color maxv = {0.0f, 0.0f, 0.0f};
+        float maxv = 1e-10f;
         for (size_t i = 0; i < w * h; ++i)
         {
-            maxv.r = fmax(maxv.r, c[i].r);
-            maxv.g = fmax(maxv.g, c[i].g);
-            maxv.b = fmax(maxv.b, c[i].b);
+            maxv = fmax(maxv, c[i].r);
+            maxv = fmax(maxv, c[i].g);
+            maxv = fmax(maxv, c[i].b);
         }
         for (size_t i = 0; i < w * h; ++i)
         {
             size_t p = (i % w) + w * (h - 1 - i / w);
             fprintf(f, "%d %d %d ",
-                    (int)(pow(clamp(c[p].r / maxv.r), 3.0f) * 255),
-                    (int)(pow(clamp(c[p].g / maxv.g), 3.0f) * 255),
-                    (int)(pow(clamp(c[p].b / maxv.b), 3.0f) * 255));
+                    (int)(clamp(c[p].r / maxv) * 255),
+                    (int)(clamp(c[p].g / maxv) * 255),
+                    (int)(clamp(c[p].b / maxv) * 255));
         }
+        // Pow
         // for (size_t i = 0; i < w * h; ++i)
         // {
         //     size_t p = (w - i % w - 1) + w * (h - i / w - 1);
@@ -208,53 +218,60 @@ void A_Ball(Scene *scene, Camera *cam)
     Camera c = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0.5 * M_PI, 0.5 * M_PI};
     *cam = c;
 }
-/*
 void Cornell_Box(Scene *scene, Camera *cam)
 {
-    DiffuseReflection grey({0.25, 0.25f, 0.25f});
-    DiffuseReflection red({0.75, 0.25, 0.25});
+    DiffuseReflection grey({0.75f, 0.75f, 0.75f});
     DiffuseReflection green({0.1f, 1.0f, 0.1f});
-    DiffuseReflection blue({0.25, 0.25, 0.75});
+    DiffuseReflection red({1.0f, 0.0f, 0.0f});
+    DiffuseReflection blue({0.0f, 0.0f, 1.0f});
     Sphere left(999.0f, {-1000.0f, -3.0f, 5.0f});
     Sphere right(999.0f, {1000.0f, 3.0f, 5.0f});
-    Sphere up(999.0f, {0.0f, -1000.0f, 5.0f});
-    Sphere bottom(999.0f, {0.0f, 1000.0f, 5.0f});
+    Sphere up(999.0f, {0.0f, 1000.0f, 5.0f});
+    Sphere bottom(999.0f, {0.0f, -1000.0f, 5.0f});
     Sphere back(999.0f, {0.0f, 0.0f, 1001.0f});
 
-    Object objs[] = {{&left, &red},
-                     {&right, &blue},
-                     {&up, &grey},
-                     {&bottom, &grey},
-                     {&back, &grey}};
+    DiffuseReflection ball_color({1.0f, 1.0f, 1.0f});
+    Sphere ball(0.3f, {0.0f, 0.0f, 0.95f});
 
-    PointLight lights[] = {{{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}};
+    Object objs[] = {
+        {&left, &red},
+        {&right, &blue},
+        {&up, &grey},
+        {&bottom, &grey},
+        {&back, &grey},
+        // {&ball, &grey}
+    };
     scene->objs.clear();
-    scene->lights.clear();
     for (Object &o : objs)
     {
-        Object *op = new Object();
-        op->shape = new Sphere(*(Sphere *)o.shape);
-        op->bsdf = new DiffuseReflection(*(DiffuseReflection *)o.bsdf);
-        scene->objs.push_back(op);
+        Object _o;
+        _o.shape = new Sphere(*(Sphere *)o.shape);
+        _o.bsdf = new DiffuseReflection(*(DiffuseReflection *)o.bsdf);
+        scene->objs.push_back(_o);
     }
+
+    PointLight lights[] = {
+        {{-0.4f, -0.4f, 0.95f}, {1.0f, 0.9f, 1.0f}},
+        {{0.4f, 0.4f, 0.95f}, {0.8f, 1.0f, 0.8f}},
+        {{0.0f, 0.0f, -1.0f}, {1.0f, 1.0f, 1.0f}}
+    };
+    scene->lights.clear();
     for (PointLight &l : lights)
     {
         scene->lights.push_back(new PointLight(l));
     }
 
-    Camera c = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0.66f * M_PI, 0.5 *
-M_PI};
+    Camera c = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0.66 * M_PI, 0.66 * M_PI};
     *cam = c;
 }
-*/
 
 int main(int argc, char *argv[])
 {
     Scene scene;
     Camera cam;
 
-    // Cornell_Box(&scene, &cam);
-    A_Ball(&scene, &cam);
+    Cornell_Box(&scene, &cam);
+    // A_Ball(&scene, &cam);
 
     // create scene
     Render render(512, 512);
