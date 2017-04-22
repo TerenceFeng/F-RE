@@ -18,10 +18,6 @@ class Sampler;
 class BRDF
 {
 public:
-	/*
-	 * virtual RGBColor f(const ShadeRec& sr, const Vector3D& wi, const Vector3D& wo) const;
-	 * virtual RGBColor rho(const ShadeRec& sr, const Vector3D& wo) const;
-	 */
 	BRDF(void);
 	void set_sampler(Sampler*);
 	virtual void set_color(const RGBColor&);
@@ -55,6 +51,7 @@ public:
 	RGBColor sample_f(const ShadeRec&, const Vector3D&, Vector3D&, float& pdf) const;
 	virtual RGBColor rho(const ShadeRec&, const Vector3D&) const;
 	void set_samples(const int, const float);
+	void set_samples();
 	RGBColor get_color(void);
 
 	void set_ks(const float ks_);

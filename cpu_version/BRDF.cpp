@@ -145,6 +145,12 @@ GlossySpecular::rho(const ShadeRec& sr, const Vector3D& wo) const
 }
 
 void
+GlossySpecular::set_samples()
+{
+	sampler_ptr->map_samples_to_hemisphere(e);
+}
+
+void
 GlossySpecular::set_samples(const int num_samples = 100, const float exp = 5.0)
 {
 	sampler_ptr = new NRooks(num_samples);

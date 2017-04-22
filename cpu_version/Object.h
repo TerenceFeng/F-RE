@@ -48,7 +48,7 @@ public:
 
 	Sphere();
 	/* center radius color */
-	Sphere(const Point3D& ct, float r, const RGBColor& c);
+	Sphere(const Point3D& ct, const float r, Material* m);
 
 	bool hit(const Ray& ray, float& tmin, ShadeRec& sr);
 	bool shadow_hit(const Ray& ray, float& tmin);
