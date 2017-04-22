@@ -21,12 +21,19 @@ Material::Material():
 
 Material::~Material() {}
 RGBColor
-Material::area_light_shade(ShadeRec& sr) const
+Material::area_light_shade(ShadeRec&) const
 { return BLACK; }
 
 RGBColor
 Material::path_shade(ShadeRec&) const
 { return BLACK; }
+
+RGBColor
+Material::global_shade(ShadeRec& sr) const
+{
+	sr.depth++;
+	return BLACK;
+}
 
 RGBColor
 Material::get_Le(ShadeRec& sr) const
@@ -117,8 +124,10 @@ Matte::path_shade(ShadeRec& sr) const
 	float pdf;
 	Vector3D wi, wo = -sr.ray.d;
 	RGBColor f = diffuse_brdf->sample_f(sr, wo, wi, pdf);
-	float ndotwi = sr.normal * wi; sr.reflected_dir = wi;
+	float ndotwi = sr.normal * wi;
 	float x = ndotwi / pdf;
+
+	sr.reflected_dir = wi;
 	if (isnan(x))
 	{
 		return f;
@@ -127,12 +136,47 @@ Matte::path_shade(ShadeRec& sr) const
 		return f * (ndotwi / pdf);
 }
 
+RGBColor
+Matte::global_shade(ShadeRec& sr) const
+{
+	RGBColor L;
+	if (sr.depth == 0)
+		L = area_light_shade(sr);
+	float pdf;
+	Vector3D wi, wo = -sr.ray.d;
+	RGBColor f = diffuse_brdf->sample_f(sr, wo, wi, pdf);
+	float ndotwi = sr.normal * wi;
+	float x = ndotwi / pdf;
+
+	sr.depth++;
+	sr.reflected_dir = wi;
+	if (isnan(x))
+		return L + f;
+	else
+		return L + f * (ndotwi / pdf);
+}
+
 /* NOTE: Phong */
 Phong::Phong(void):
 	ambient_brdf(new Lambertian),
 	diffuse_brdf(new Lambertian),
 	specular_brdf(new GlossySpecular)
 {}
+
+Phong::Phong(const float ka_, const float kd_, const float ks_, const float es_, const RGBColor& c_):
+	ambient_brdf(new Lambertian),
+	diffuse_brdf(new Lambertian),
+	specular_brdf(new GlossySpecular)
+{
+	ambient_brdf->set_kd(ka_);
+	ambient_brdf->set_color(c_);
+	diffuse_brdf->set_kd(kd_);
+	diffuse_brdf->set_color(c_);
+	specular_brdf->set_ks(ks_);
+	specular_brdf->set_color(color);
+	specular_brdf->set_e(es_);
+}
+
 void
 Phong::set_ka(const float ka_)
 { ambient_brdf->set_kd(ka_); }
@@ -146,11 +190,16 @@ void
 Phong::set_es(const float es_)
 { specular_brdf->set_e(es_); }
 void
-Phong::set_color(const RGBColor c_)
+Phong::set_color(const RGBColor& c_)
 {
 	ambient_brdf->set_color(c_);
 	diffuse_brdf->set_color(c_);
 	specular_brdf->set_color(c_);
+}
+void
+Phong::set_sampler(Sampler* s_)
+{
+	specular_brdf->set_sampler(s_);
 }
 
 RGBColor
@@ -185,13 +234,16 @@ Phong::area_light_shade(ShadeRec& sr) const
 RGBColor
 Phong::path_shade(ShadeRec& sr) const
 {
+	sr.color = area_light_shade(sr);
+
 	float pdf;
 	Vector3D wi, wo = -sr.ray.d;
-	RGBColor f = diffuse_brdf->sample_f(sr, wo, wi, pdf);
+	RGBColor f = specular_brdf->sample_f(sr, wo, wi, pdf);
 	float ndotwi = sr.normal * wi;
 	sr.reflected_dir = wi;
-	sr.depth += 1;
 	float x = ndotwi / pdf;
+
+	sr.reflected_dir = wi;
 	if (isnan(x))
 		return f;
 	else
@@ -281,18 +333,36 @@ Reflective::area_light_shade(ShadeRec& sr) const
 	sr.reflected_dir = wi;
 
 	sr.color += L;
-	return RGBColor(fr * (sr.normal * wi));
+	return fr * (sr.normal * wi);
 }
 
 RGBColor
 Reflective::path_shade(ShadeRec& sr) const
 {
+	return area_light_shade(sr);
+/*
+ *     sr.color = Phong::area_light_shade(sr);
+ * 
+ *     Vector3D wo = -sr.ray.d;
+ *     Vector3D wi;
+ *     float dummy_pdf; [> always 1 in PerfectSpecular BRDf <]
+ *     RGBColor fr = reflective_brdf->sample_f(sr, wo, wi, dummy_pdf);
+ *     sr.reflected_dir = wi;
+ * 
+ *     return fr * (sr.normal * wi);
+ */
+}
+
+RGBColor
+Reflective::global_shade(ShadeRec& sr) const
+{
 	Vector3D wo = -sr.ray.d;
 	Vector3D wi;
 	float dummy_pdf; /* always 1 in PerfectSpecular BRDf */
 	RGBColor fr = reflective_brdf->sample_f(sr, wo, wi, dummy_pdf);
-	sr.reflected_dir = wi;
 
+	sr.reflected_dir = wi;
+	sr.depth++;
 	return fr * (sr.normal * wi);
 }
 
@@ -301,6 +371,19 @@ GlossyReflective::GlossyReflective(void):
 	Phong(),
 	glossy_specular_brdf(new GlossySpecular)
 {}
+
+GlossyReflective::GlossyReflective(const float ka_, const float kd_, const float ks_, const float kr_, float es_, const RGBColor& c_):
+	Phong(),
+	glossy_specular_brdf(new GlossySpecular)
+{
+	Phong::set_ka(ka_);
+	Phong::set_kd(kd_);
+	Phong::set_ks(ks_);
+	Phong::set_es(es_);
+	set_color(c_);
+	set_kr(kr_);
+	glossy_specular_brdf->set_samples(100, es_);
+}
 
 void
 GlossyReflective::set_kr(const float kr_)
@@ -323,10 +406,18 @@ GlossyReflective::set_exponent(const float e_)
 	glossy_specular_brdf->set_samples(100, e_);
 }
 
+void
+GlossyReflective::set_sampler(Sampler *s_)
+{
+	glossy_specular_brdf->set_sampler(s_);
+	glossy_specular_brdf->set_samples();
+}
+
 RGBColor
 GlossyReflective::area_light_shade(ShadeRec& sr) const
 {
 	sr.color = Phong::area_light_shade(sr);
+
 	Vector3D wo(-sr.ray.d);
 	wo.normalize();
 	Vector3D wi;
@@ -349,5 +440,20 @@ GlossyReflective::path_shade(ShadeRec& sr) const
 	RGBColor fr = glossy_specular_brdf->sample_f(sr, wo, wi, pdf);
 
 	sr.reflected_dir = wi;
+	return fr * (sr.normal * wi) / pdf;
+}
+
+RGBColor
+GlossyReflective::global_shade(ShadeRec& sr) const
+{
+
+	Vector3D wo = -sr.ray.d;
+	Vector3D wi;
+	float pdf;
+	RGBColor fr = glossy_specular_brdf->sample_f(sr, wo, wi, pdf);
+
+	sr.reflected_dir = wi;
+
+	if (sr.depth == 0) sr.depth = 1;
 	return fr * (sr.normal * wi) / pdf;
 }

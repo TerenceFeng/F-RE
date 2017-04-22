@@ -38,10 +38,12 @@ Object::get_normal(const Point3D&)
 
 /* NOTE: Implementation of Sphere */
 Sphere::Sphere(): center(), radius(0.0f) {}
-Sphere::Sphere(const Point3D& ct, float r, const RGBColor& c):
+Sphere::Sphere(const Point3D& ct, const float r, Material *m_):
 	center(ct),
 	radius(r)
-{}
+{
+	Object::set_material(m_);
+}
 
 bool
 Sphere::hit(const Ray& ray, float& tmin, ShadeRec& sr)

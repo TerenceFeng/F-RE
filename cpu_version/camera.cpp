@@ -116,7 +116,7 @@ Camera::print() {
 
 	fprintf(fp, "P6\n");
 	fprintf(fp, "%d %d\n%d\n", width, height, 255);
-	printf("%f\n", maxval);
+	printf("\nBrightest value:        %f\n", maxval);
 	for(int r = pixels.size() - 1; r >= 0; r--) {
 		for(int c = 0; c < pixels[r].size(); c++) {
 			fprintf(fp, "%c", (unsigned char)(int)(pixels[r][c] / maxval * 255));
@@ -139,8 +139,9 @@ Camera::render_scene()
 	float x, y;
 	Point2D sp;
 
-	printf("%d\n", sampler.num_samples);
+	printf("Number of samples:      %d\n", sampler.num_samples);
 	for (int r = 0; r < height; r++)
+	{
 		for (int c = 0; c < width; c++)
 		{
 			L = BLACK;
@@ -151,12 +152,15 @@ Camera::render_scene()
 				y = s * (r - 0.5f * height + sp.y);
 				ray.d = ray_direction(x, y);
 				// L += trace_ray(ray);
-				L += trace_path(ray, 0);
+				// L += trace_path(ray, 0);
+				L += trace_path_global(ray, 0);
 			}
 
 			L /= sampler.num_samples;
 			add_pixel(r, c, L);
 		}
+		fprintf(stderr, "\rProcess:                %3.2f", ((float)(r + 1) / height * 100));
+	}
 
 	print();
 }
@@ -239,7 +243,7 @@ RGBColor
 Camera::trace_path_global(const Ray& ray, const int depth)
 {
 	if (depth >= MAX_DEPTH)
-		return BLACK;
+		return trace_ray(ray);
 	ShadeRec sr;
 	Normal normal;
 	Point3D local_hit_point;
@@ -265,11 +269,12 @@ Camera::trace_path_global(const Ray& ray, const int depth)
 		normal.normalize();
 		sr.normal = normal;
 		sr.local_hit_point = local_hit_point;
+		sr.depth = depth;
 		sr.ray = ray;
 		/* TODO: change path_shade to global_shade */
-		RGBColor traced_color = nearest_object->material_ptr->path_shade(sr);
+		RGBColor traced_color = nearest_object->material_ptr->global_shade(sr);
 		Ray reflected_ray(sr.hit_point, sr.reflected_dir);
-		return traced_color * trace_path(reflected_ray, depth + 1);
+		return traced_color * trace_path_global(reflected_ray, sr.depth + 1);
 	}
 	return world.background_color;
 }
