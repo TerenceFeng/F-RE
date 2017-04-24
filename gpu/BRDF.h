@@ -1,40 +1,85 @@
 #pragma once
 
-class BxDF
+#include "sampler.h"
+
+// DATA
+struct BSDFParam
 {
-   public:
-    virtual Color f(const Normal &nr, const Vector &wi,
-                    const Vector &wo) const = 0;
+    Normal nr;
+    Vector wo;
+
+    Vector wi;
+    Color f;
+    float pdf;
 };
 
-class SpecularReflection : public BxDF
+struct Lambertian
 {
-   public:
-    SpecularReflection(const Color &r) : R(r)
-    {
-    }
-    virtual Color f(const Normal &nr, const Vector &wi, const Vector &wo) const
-    {
-        return {0.0f, 0.0f, 0.0f};
-    }
-
-   private:
+    Color R;
+};
+struct SpecularReflection
+{
+    Color R;
+};
+struct SpecularTransmission
+{
     Color R;
 };
 
-// Lambertian
-class DiffuseReflection : public BxDF
+// Pool<Lambertian> Lpool;
+// Pool<SpecularReflection> Rpool;
+// Pool<SpecularTransmission> Tpool;
+
+// FUNC
+struct ComputeBSDF
 {
-   public:
-    DiffuseReflection(const Color &r) : R(r)
+    BSDFParam param;
+    float ratio[3];
+    // model_t model[3];
+    Lambertian l;
+    SpecularReflection r;
+    SpecularTransmission t;
+
+    void compute(float pick, Normal nr, Vector wo)
     {
+        param.nr = nr;
+        param.wo = wo;
+        if (pick <= ratio[0])
+            _f0(param, l);
+        else if (pick <= ratio[1])
+            _f1(param, r);
+        else // if (pick <= ratio[2])
+            _f2(param, t);
     }
-    virtual Color f(const Normal &nr, const Vector &wi, const Vector &wo) const
+    Color f() const
     {
-        return Vector::Scale(R.v, 1.0f / 3.14159f);
-        // return R * INV_PI;
+        return param.f;
+    }
+    float pdf() const
+    {
+        return param.pdf;
+    }
+    Vector wi() const
+    {
+        return param.wi;
     }
 
    private:
-    Color R;
+    static void _f0(BSDFParam &param, const Lambertian &model)
+    {
+        param.wi = CosineSampleHemisphere(frandom(), frandom());
+        if (param.wi.dot(param.nr) < 0.0f) param.wi = -param.wi;
+        param.f.v = Vector::Scale(model.R.v, 1.0f / 3.14159f);
+        param.pdf = 1.0f / 3.14159f;
+    }
+    static void _f1(BSDFParam &param, const SpecularReflection &model)
+    {
+        Vector nr = param.nr;
+        Vector wo = param.wo;
+        param.wi = Vector(nr).scale(wo.dot(nr)).sub(wo).scale(2.0f).add(wo).norm();
+    }
+    static void _f2(BSDFParam &param, const SpecularTransmission &model)
+    {
+    }
 };
+

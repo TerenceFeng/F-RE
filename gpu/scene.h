@@ -5,7 +5,8 @@
 struct Object
 {
     Shape *shape;
-    BxDF *bsdf;
+    ComputeBSDF *bsdf;
+    ComputeLight *light;
 };
 
 #include <vector>
@@ -14,7 +15,6 @@ class Scene
 {
    public:
     std::vector<Object> objs;
-    std::vector<Light *> lights;
 };
 
 /* view */

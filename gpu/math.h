@@ -278,6 +278,10 @@ struct Vec3
     {
         return Sub(*this, v);
     }
+    Vec3<T> operator-(void) const
+    {
+        return {-x, -y, -z};
+    }
     Vec3<T> &operator+=(const Vec3<T> &v)
     {
         return add(v);
