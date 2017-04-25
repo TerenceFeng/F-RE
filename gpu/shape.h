@@ -4,7 +4,7 @@
 class Shape
 {
    public:
-    virtual bool intersect(const Ray &r, float &tHit) const = 0;
+    __device__ __host__ virtual bool intersect(const Ray &r, float &tHit) const = 0;
     virtual Normal getNormal(const Point &pos) const = 0;
 };
 
@@ -18,7 +18,8 @@ class Sphere : public Shape
     Sphere(float r, const Vertex &c) : radius(r), center(c)
     {
     }
-    virtual bool intersect(const Ray &r, float &tHit) const
+    __device__ __host__
+	virtual bool intersect(const Ray &r, float &tHit) const
     {
         Vertex op = center - r.pos;
         float eps = 1e-4;
