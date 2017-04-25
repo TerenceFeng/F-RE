@@ -1,4 +1,4 @@
-src=main.cpp
+src=main.cu
 
 .Phony: all fast debug
 
@@ -10,6 +10,9 @@ fast : ${src}
 
 debug : ${src}
 	clang++ -g -std=c++11 $^ -o ~/bin/render
+
+gpu : ${src}
+	nvcc -std=c++11 $^ -o render
 
 # a.out : main.cpp
 #     clang++ -std=c++11 $^ -o $@

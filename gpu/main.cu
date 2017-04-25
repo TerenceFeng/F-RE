@@ -1,7 +1,6 @@
 // ------- Common --------
 #include "compute.h"  // Compute-Engine Subsystem
 #include "math.h"     // Math Library
-#include "grid.h"
 typedef Vec3<float> Vertex;
 typedef Vec3<float> Vector;
 typedef Vec3<float> Point;
@@ -53,12 +52,19 @@ struct Ray
 
 // ## debug helper ##
 #include "compute_kernels.h"
-double clamp(double d)
+__device__ __host__ double clamp(double d)
 {
     return d > 1.0 ? 1.0 : (d < 0.0 ? 0.0 : d);
 }
 
+__device__ __host__ float clamp(float d, float min, float max)
+{
+	return d > max ? max : (d < min ? min : d);
+}
+
 // ------- Renderer -------
+
+
 class Render
 {
    public:
@@ -223,6 +229,9 @@ void Cornell_Box(Scene *scene, Camera *cam)
     Camera c = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0.66 * M_PI, 0.66 * M_PI};
     *cam = c;
 }
+
+
+#include "grid.cu"
 
 int main(int argc, char *argv[])
 {

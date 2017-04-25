@@ -1,28 +1,28 @@
-#pragma once
+// #pragma once
+
 #include <vector>
 #include <cfloat>
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
-#include "math.h"
-#include "compute.h"
+// #include "scene.h"
 
-typedef struct BBox
+struct BBox
 {
 	float x0 = FLT_MAX, y0 = FLT_MAX, z0 = FLT_MAX,
 		  x1 = FLT_MAX, y1 = FLT_MAX, z1 = FLT_MAX;
-} BBox;
+};
 
-typedef struct Grid
+struct Grid
 {
 	thrust::host_vector<thrust::host_vector<Object>> cells;
 	float x0 = FLT_MAX, y0 = FLT_MAX, z0 = FLT_MAX,
 		  x1 = FLT_MAX, y1 = FLT_MAX, z1 = FLT_MAX;
-} Grid;
+};
 
 namespace grid
 {
 
-	BBox
+	__device__ __host__ BBox
 	get_bounded_box(const Object& obj)
 	{
 		return BBox();
@@ -42,7 +42,7 @@ namespace grid
 		int iy = blockDim.y * blockIdx.y + threadIdx.y;
 		int iz = blockDim.z * blockIdx.z + threadIdx.z;
 		int index = ix + nx * iy + nx * ny * iz;
-		thrust::device_vector<Object> cell;
+		/* thrust::device_vector<Object> cell; */
 
 		for (int i = 0; i < objs.size(); i++)
 		{
@@ -59,11 +59,12 @@ namespace grid
 			if (ixmin >= x0 && iymin >= y0 && izmin >= z0 &&
 				ixmax <= x1 && iymax <= y1 && izmax <= z1)
 			{
-				cell.push_back(objs[i]);
+				/* cell.push_back(objs[i]); */
+				cells[index].push_back(objs[i]);
 			}
 
 		}
-		cells[index] = cell;
+		/* cells[index] = cell; */
 	}
 
 	Grid
@@ -96,7 +97,11 @@ namespace grid
 		int nz = multiplier * wz / s + 1;
 
 
-		thrust::device_vector<thrust::device_vector<Object>> cells_d(nx * ny * nz);
+		/* thrust::device_vector<thrust::device_vector<Object>> cells_d(nx * ny * nz); */
+
+		int num_cells = nx * ny * ny;
+		cells_d *d_cells = cudaMalloc(num_cells * sizeof(Object*));
+
 		/* TODO: setup dimension */
 		setup_single_cell_d<<<1, 1>>>(objs, cells_d,
 									  nx, ny, nz,
