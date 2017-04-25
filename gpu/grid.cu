@@ -14,7 +14,8 @@ struct BBox
 
 struct Grid
 {
-	thrust::host_vector<thrust::host_vector<Object>> cells;
+	/* thrust::host_vector<thrust::host_vector<Object>> cells; */
+	Object **cells;
 	float x0 = FLT_MAX, y0 = FLT_MAX, z0 = FLT_MAX,
 		  x1 = FLT_MAX, y1 = FLT_MAX, z1 = FLT_MAX;
 };
@@ -34,21 +35,27 @@ namespace grid
 				v.x <= grid.x1 && v.y <= grid.y1 && v.z <= grid.z1);
 	}
 
-	__global__ void setup_single_cell_d(const thrust::device_vector<Object>& objs, thrust::device_vector<thrust::device_vector<Object>>& cells,
-								   int nx, int ny, int nz,
-								   int x0, int y0, int z0, int x1, int y1, int z1)
+	__global__ void count_single_cell_d(Object *objs, int size, int *cells_count,
+									    int nx, int ny, int nz,
+										int x0, int y0, int z0, int x1, int y1, int z1)
 	{
+
 		int ix = blockDim.x * blockIdx.x + threadIdx.x;
 		int iy = blockDim.y * blockIdx.y + threadIdx.y;
 		int iz = blockDim.z * blockIdx.z + threadIdx.z;
-		int index = ix + nx * iy + nx * ny * iz;
-		/* thrust::device_vector<Object> cell; */
 
-		for (int i = 0; i < objs.size(); i++)
+		/* boundry check */
+		if (ix >= nx || iy >= ny || iz >= nz)
+			return;
+
+		int index = ix + nx * iy + nx * ny * iz;
+
+		int local_count = 0;
+
+		for (int i = 0; i < size; i++)
 		{
 			const BBox b = get_bounded_box(objs[i]);
 
-			/* TODO: mark clamp as __device__ */
 			int ixmin = clamp((b.x0 - x0) * nx / (x1 - x0), 0, nx - 1);
 			int iymin = clamp((b.y0 - y0) * ny / (y1 - y0), 0, ny - 1);
 			int izmin = clamp((b.z0 - z0) * nz / (z1 - z0), 0, nz - 1);
@@ -59,16 +66,52 @@ namespace grid
 			if (ixmin >= x0 && iymin >= y0 && izmin >= z0 &&
 				ixmax <= x1 && iymax <= y1 && izmax <= z1)
 			{
-				/* cell.push_back(objs[i]); */
-				cells[index].push_back(objs[i]);
+				local_count += 1;
 			}
 
 		}
-		/* cells[index] = cell; */
+
+		cells_count[index] = local_count;
+
+	}
+
+	__global__ void setup_single_cell_d(Object *objs, int size, Object **cells,
+								   int nx, int ny, int nz,
+								   int x0, int y0, int z0, int x1, int y1, int z1)
+	{
+		int ix = blockDim.x * blockIdx.x + threadIdx.x;
+		int iy = blockDim.y * blockIdx.y + threadIdx.y;
+		int iz = blockDim.z * blockIdx.z + threadIdx.z;
+
+		/* boundry check */
+		if (ix >= nx || iy >= ny || iz >= nz)
+			return;
+
+		int index = ix + nx * iy + nx * ny * iz;
+		int local_count = 0;
+
+		for (int i = 0; i < size; i++)
+		{
+			const BBox b = get_bounded_box(objs[i]);
+
+			int ixmin = clamp((b.x0 - x0) * nx / (x1 - x0), 0, nx - 1);
+			int iymin = clamp((b.y0 - y0) * ny / (y1 - y0), 0, ny - 1);
+			int izmin = clamp((b.z0 - z0) * nz / (z1 - z0), 0, nz - 1);
+			int ixmax = clamp((b.x1 - x0) * nx / (x1 - x0), 0, nx - 1);
+			int iymax = clamp((b.y1 - y0) * ny / (y1 - y0), 0, ny - 1);
+			int izmax = clamp((b.z1 - z0) * nz / (z1 - z0), 0, nz - 1);
+
+			if (ixmin >= x0 && iymin >= y0 && izmin >= z0 &&
+				ixmax <= x1 && iymax <= y1 && izmax <= z1)
+			{
+				cells[index][local_count++] = objs[i];
+			}
+
+		}
 	}
 
 	Grid
-	dispach_cells_setup(const std::vector<Object>& objs)
+	dispach_cells_setup(std::vector<Object>& objs)
 	{
 		Grid grid;
 		std::vector<BBox> bboxs;
@@ -96,17 +139,48 @@ namespace grid
 		int ny = multiplier * wy / s + 1;
 		int nz = multiplier * wz / s + 1;
 
+		int num_cells = nx * ny * nz;
 
-		/* thrust::device_vector<thrust::device_vector<Object>> cells_d(nx * ny * nz); */
+		/* convert vector to array */
+		Object *h_objs = &objs[0];
+		Object *d_objs;		cudaMalloc((void **)&d_objs, objs.size() * sizeof(Object));
+		/* copy objs to device */
+		cudaMemcpy(d_objs, h_objs, objs.size(), cudaMemcpyHostToDevice);
 
-		int num_cells = nx * ny * ny;
-		cells_d *d_cells = cudaMalloc(num_cells * sizeof(Object*));
+		/* count number of objects in each cell */
+		int *d_cells_count;		 cudaMalloc((void **)&d_cells_count, num_cells * sizeof(int));
+		int *h_cells_count = (int *)malloc(num_cells * sizeof(int));
+
+		count_single_cell_d<<<1, 1>>>(d_objs, objs.size(), d_cells_count,
+									  nx, ny, ny,
+									  grid.x0, grid.y0, grid.z0, grid.x1, grid.y1, grid.z1);
+
+		cudaMemcpy(h_cells_count, d_cells_count, num_cells * sizeof(int), cudaMemcpyDeviceToHost);
+
+
+		/* allocate space for cells */
+		grid.cells = (Object **)malloc(num_cells * sizeof(Object *));
+
+		Object **d_cells;
+		cudaMalloc((void **)&d_cells, num_cells * sizeof(Object*));
+		for (int i = 0; i < num_cells; i++)
+		{
+			cudaMalloc((void **)&d_cells[i], h_cells_count[i] * sizeof(Object));
+		}
 
 		/* TODO: setup dimension */
-		setup_single_cell_d<<<1, 1>>>(objs, cells_d,
+		setup_single_cell_d<<<1, 1>>>(d_objs, objs.size(), d_cells,
 									  nx, ny, nz,
 									  grid.x0, grid.y0, grid.z0, grid.x1, grid.y1, grid.z1);
-		thrust::copy(cells_d.begin(), cells_d.end(), grid.cells.begin());
+
+		for (int i = 0; i < num_cells; i++)
+		{
+			cudaMemcpy(grid.cells[i], d_cells[i], h_cells_count[i] * sizeof(Object), cudaMemcpyDeviceToHost);
+		}
+
+
+		cudaFree(d_cells_count);
+		cudaFree(d_cells);
 
 		return grid;
 	}
