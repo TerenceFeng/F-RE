@@ -1,6 +1,7 @@
 // ------- Common --------
 #include "compute.h"  // Compute-Engine Subsystem
 #include "math.h"     // Math Library
+#include "grid.h"
 typedef Vec3<float> Vertex;
 typedef Vec3<float> Vector;
 typedef Vec3<float> Point;
