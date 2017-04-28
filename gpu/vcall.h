@@ -12,3 +12,4 @@
 #define VCALL_INIT(name) _vptr_##name = &_impl_##name
 #define VCALL_IMPL(_class, ret, name, ...) \
     static ret _impl_##name(const _class * _this, ##__VA_ARGS__)
+
