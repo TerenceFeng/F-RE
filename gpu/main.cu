@@ -44,10 +44,11 @@ public:
         state(w * h, IN_DEVICE),
         obj(0), cam(0), auto_clear(true)
     {}
-    void init(Pool<Object> &obj, Pool<Camera> &cam, size_t samp)
+    void init(Pool<Object> &obj, Pool<Camera> &cam, _index_node *inode_list, size_t samp)
     {
         this->obj.swap(obj);
         this->cam.swap(cam);
+        this->inode_list = inode_list;
         sample = samp;
         s = samp;
 
@@ -55,7 +56,7 @@ public:
         dim3 blockD(edge, edge);
         dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
 
-        init_rand << <gridD, blockD >> > (state.getDevice());
+        init_rand <<<gridD, blockD>>> (state.getDevice());
     }
     bool update(unsigned char *data)
     {
@@ -66,19 +67,18 @@ public:
         dim3 blockD(edge, edge);
         dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
 
-        init_ray << <gridD, blockD >> > (ray0.getDevice(), cam.getDevice(), state.getDevice());
+        init_ray <<<gridD, blockD>>> (ray0.getDevice(), cam.getDevice(), state.getDevice());
         //ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
         //ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
-        //							obj.getDevice(),
-        //							obj.getSize());
-        //ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(),
-        //                            color.getDevice(), obj.getDevice(),
-        //                            obj.getSize(), state.getDevice());
+        //							  obj.getDevice(), obj.getSize());
+        //ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(), color.getDevice(),
+        //                               obj.getDevice(), obj.getSize()
+        //                               bsdf, state.getDevice());
 
-        trace_ray << <gridD, blockD >> > (ray0.getDevice(), ray1.getDevice(),
-                                          c2.getDevice(), obj.getDevice(),
-                                          obj.getSize(), state.getDevice());
-        scale_add << <gridD, blockD >> > (color.getDevice(), c2.getDevice(), 50.0f / (float)sample);
+        trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
+                                       obj.getDevice(), obj.getSize(),
+                                       inode_list, state.getDevice());
+        scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 50.0f / (float)sample);
 
         color.copyFromDevice();
         //for (size_t i = 0; i < color.getSize(); ++i)
@@ -206,103 +206,127 @@ private:
     Pool<Object> obj;
     Pool<Camera> cam;
 
+    _index_node *inode_list;
+
     // DEBUG
     size_t sample, s;
     bool auto_clear;
 };
 
-void TwoBall(Render &render, size_t sample)
-{
-    Pool<Sphere> shape(2, IN_HOST | IN_DEVICE);
-    Pool<ComputeBSDF> bsdf(1, IN_HOST | IN_DEVICE);
-    Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
-    shape.getHost()[0] = {0,{ 0.0f, 0.0f, 5000.0f }, 4000.0f};
-    shape.getHost()[1] = {0,{ 0.0f, 0.0f, 500.0f }, 100.0f};
-    shape.copyToDevice();
-    bsdf.getHost()[0] = {
-        {},
-        { 1.0f, 0.0f, 0.0f },
-        { { 1.0f, 1.0f, 1.0f } },
-        { { 0.0f, 0.0f, 0.0f } },
-        { { 0.0f, 0.0f, 0.0f } }
-    };
-    bsdf.copyToDevice();
-    light.getHost()[0] = {{},{ { 1.0f, 1.0f, 1.0f } }};
-    light.copyToDevice();
+//void TwoBall(Render &render, size_t sample)
+//{
+//    //Pool<ComputeBSDF> bsdf(1, IN_HOST | IN_DEVICE);
+//    //bsdf.getHost()[0] = {
+//    //    {},
+//    //    {1.0f, 0.0f, 0.0f},
+//    //    {{1.0f, 1.0f, 1.0f}},
+//    //    {{0.0f, 0.0f, 0.0f}},
+//    //    {{0.0f, 0.0f, 0.0f}}
+//    //};
+//    //bsdf.copyToDevice();
+//    BSDFFactory factory(1);
+//    factory.createLambertian({1.0f, 1.0f, 1.0f});
+//    factory.syncToDevice();
+//    Pool<BSDFPicker> picker(1, IN_HOST | IN_DEVICE);
+//    picker.getHost()[0] = {{0, 0, 0}, {1.0f, 0.0f, 0.0f}};
+//    picker.copyToDevice();
+//
+//    Pool<Sphere> shape(2, IN_HOST | IN_DEVICE);
+//    Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
+//
+//    shape.getHost()[0] = {0,{ 0.0f, 0.0f, 5000.0f }, 4000.0f};
+//    shape.getHost()[1] = {0,{ 0.0f, 0.0f, 500.0f }, 100.0f};
+//    shape.copyToDevice();
+//    light.getHost()[0] = {{},{ { 1.0f, 1.0f, 1.0f } }};
+//    light.copyToDevice();
+//
+//    Pool<Object> object(2, IN_HOST | IN_DEVICE);
+//    object.getHost()[0] = {shape.getDevice(), picker.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
+//    object.getHost()[1] = {shape.getDevice() + 1, nullptr, light.getDevice()}; // bsdf.getDevice(), light.getDevice()};
+//    object.copyToDevice();
+//
+//    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
+//    cam.getHost()[0] = {{ 0.0f, 0.0f, 0.0f },{ 0.0f, 0.0f, 1.0f }, 0.66f * M_PI, 0.66f * M_PI};
+//    cam.copyToDevice();
+//
+//    render.init(object, cam, factory.getIndexNodeList(), sample);
+//}
 
-    Pool<Object> object(2, IN_HOST | IN_DEVICE);
-    object.getHost()[0] = {shape.getDevice(), bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
-    object.getHost()[1] = {shape.getDevice() + 1, nullptr, light.getDevice()}; // bsdf.getDevice(), light.getDevice()};
-    object.copyToDevice();
-
-    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
-    cam.getHost()[0] = {{ 0.0f, 0.0f, 0.0f },{ 0.0f, 0.0f, 1.0f }, 0.66f * M_PI, 0.66f * M_PI};
-    cam.copyToDevice();
-
-    render.init(object, cam, sample);
-}
-
-void CornellBox(Render &render, size_t sample)
-{
-    Pool<Sphere> shape(7, IN_HOST | IN_DEVICE);
-    Pool<ComputeBSDF> bsdf(5, IN_HOST | IN_DEVICE);
-    Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
-
-    shape.getHost()[0] = {0, { -10000.0f, -3.0f, 5.0f }, 9999.0f};
-    shape.getHost()[1] = {0, { 10000.0f, 3.0f, 5.0f }, 9999.0f};
-    shape.getHost()[2] = {0, { 0.0f, 10000.0f, 5.0f }, 9999.0f};
-    shape.getHost()[3] = {0, { 0.0f, -10000.0f, 5.0f }, 9999.0f};
-    shape.getHost()[4] = {0, { 0.0f, 0.0f, 10001.0f }, 9999.0f};
-    shape.getHost()[5] = {0, {0.0f, 1.5f, 1.8f}, 0.6f};
-    shape.getHost()[6] = {0,{ 0.0f, 0.0f, -5001.0f }, 5001.0f};
-
-    bsdf.getHost()[0] = { // grey
-        {}, {1.0f, 0.0f, 0.0f},
-        {{0.75f, 0.75f, 0.75f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
-    };
-    bsdf.getHost()[1] = { // green
-        {}, {1.0f, 0.0f, 0.0f},
-        {{0.1f, 1.0f, 0.1f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
-    };
-    bsdf.getHost()[2] = { // red
-        {}, {1.0f, 0.0f, 0.0f},
-        {{1.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
-    };
-    bsdf.getHost()[3] = { // blue
-        {}, {1.0f, 0.0f, 0.0f},
-        {{0.0f, 0.0f, 1.0f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
-    };
-    bsdf.getHost()[4] = { // white
-        {},{ 1.0f, 0.0f, 0.0f },
-        { { 1.0f, 1.0f, 1.0f } },{ { 0.0f, 0.0f, 0.0f } },{ { 0.0f, 0.0f, 0.0f } }
-    };
-    light.getHost()[0] = {{},{ { 1.0f, 1.0f, 1.0f } }};
-
-    shape.copyToDevice();
-    bsdf.copyToDevice();
-    light.copyToDevice();
-
-    Pool<Object> object(6, IN_HOST | IN_DEVICE);
-    object.getHost()[0] = {shape.getDevice(), bsdf.getDevice() + 2, nullptr}; // bsdf.getDevice(), light.getDevice()};
-    object.getHost()[1] = {shape.getDevice() + 1, bsdf.getDevice() + 3, nullptr}; // bsdf.getDevice(), light.getDevice()};
-    object.getHost()[2] = {shape.getDevice() + 2, bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
-    object.getHost()[3] = {shape.getDevice() + 3, bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
-    object.getHost()[4] = {shape.getDevice() + 4, bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
-    object.getHost()[5] = {shape.getDevice() + 5, nullptr, light.getDevice()}; // bsdf.getDevice(), light.getDevice()};
-    //object.getHost()[6] = { shape.getDevice() + 6, bsdf.getDevice() + 4, nullptr }; // bsdf.getDevice(), light.getDevice()};
-    object.copyToDevice();
-
-    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
-    cam.getHost()[0] = {{ 0.0f, 0.0f, 0.0f },{ 0.0f, 0.0f, 1.0f }, 0.66f * M_PI, 0.66f * M_PI};
-    cam.copyToDevice();
-
-    render.init(object, cam, sample);
-}
+//void CornellBox(Render &render, size_t sample)
+//{
+//    Pool<Sphere> shape(7, IN_HOST | IN_DEVICE);
+//    Pool<ComputeBSDF> bsdf(5, IN_HOST | IN_DEVICE);
+//    Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
+//
+//    shape.getHost()[0] = {0, { -10000.0f, -3.0f, 5.0f }, 9999.0f};
+//    shape.getHost()[1] = {0, { 10000.0f, 3.0f, 5.0f }, 9999.0f};
+//    shape.getHost()[2] = {0, { 0.0f, 10000.0f, 5.0f }, 9999.0f};
+//    shape.getHost()[3] = {0, { 0.0f, -10000.0f, 5.0f }, 9999.0f};
+//    shape.getHost()[4] = {0, { 0.0f, 0.0f, 10001.0f }, 9999.0f};
+//    shape.getHost()[5] = {0, {0.0f, 1.5f, 1.8f}, 0.6f};
+//    shape.getHost()[6] = {0,{ 0.0f, 0.0f, -5001.0f }, 5001.0f};
+//
+//    bsdf.getHost()[0] = { // grey
+//        {}, {1.0f, 0.0f, 0.0f},
+//        {{0.75f, 0.75f, 0.75f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
+//    };
+//    bsdf.getHost()[1] = { // green
+//        {}, {1.0f, 0.0f, 0.0f},
+//        {{0.1f, 1.0f, 0.1f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
+//    };
+//    bsdf.getHost()[2] = { // red
+//        {}, {1.0f, 0.0f, 0.0f},
+//        {{1.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
+//    };
+//    bsdf.getHost()[3] = { // blue
+//        {}, {1.0f, 0.0f, 0.0f},
+//        {{0.0f, 0.0f, 1.0f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
+//    };
+//    bsdf.getHost()[4] = { // white
+//        {},{ 1.0f, 0.0f, 0.0f },
+//        { { 1.0f, 1.0f, 1.0f } },{ { 0.0f, 0.0f, 0.0f } },{ { 0.0f, 0.0f, 0.0f } }
+//    };
+//    light.getHost()[0] = {{},{ { 1.0f, 1.0f, 1.0f } }};
+//
+//    shape.copyToDevice();
+//    bsdf.copyToDevice();
+//    light.copyToDevice();
+//
+//    Pool<Object> object(6, IN_HOST | IN_DEVICE);
+//    object.getHost()[0] = {shape.getDevice(), bsdf.getDevice() + 2, nullptr}; // bsdf.getDevice(), light.getDevice()};
+//    object.getHost()[1] = {shape.getDevice() + 1, bsdf.getDevice() + 3, nullptr}; // bsdf.getDevice(), light.getDevice()};
+//    object.getHost()[2] = {shape.getDevice() + 2, bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
+//    object.getHost()[3] = {shape.getDevice() + 3, bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
+//    object.getHost()[4] = {shape.getDevice() + 4, bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
+//    object.getHost()[5] = {shape.getDevice() + 5, nullptr, light.getDevice()}; // bsdf.getDevice(), light.getDevice()};
+//    //object.getHost()[6] = { shape.getDevice() + 6, bsdf.getDevice() + 4, nullptr }; // bsdf.getDevice(), light.getDevice()};
+//    object.copyToDevice();
+//
+//    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
+//    cam.getHost()[0] = {{ 0.0f, 0.0f, 0.0f },{ 0.0f, 0.0f, 1.0f }, 0.66f * M_PI, 0.66f * M_PI};
+//    cam.copyToDevice();
+//
+//    render.init(object, cam, sample);
+//}
 
 void SmallPT(Render &render, size_t sample)
 {
+    BSDFFactory factor(5);
+    factor.createLambertian({0.75f, 0.25f, 0.25f});
+    factor.createLambertian({0.25f, 0.25f, 0.75f});
+    factor.createLambertian({0.75f, 0.75f, 0.75f});
+    factor.createLambertian({0.0f, 0.0f, 0.0f});
+    factor.createSpecRefl({0.999f, 0.999f, 0.999f});
+    factor.syncToDevice();
+    Pool<BSDFPicker> picker(5, IN_DEVICE | IN_HOST);
+    picker.getHost()[0] = {{0,0,0},{1.0f, 0.0f,0.0f}};
+    picker.getHost()[1] = {{1,0,0},{1.0f, 0.0f,0.0f}};
+    picker.getHost()[2] = {{2,0,0},{1.0f, 0.0f,0.0f}};
+    picker.getHost()[3] = {{3,0,0},{1.0f, 0.0f,0.0f}};
+    picker.getHost()[4] = {{0,4,0},{0.0f, 1.0f,0.0f}};
+    picker.copyToDevice();
+
     Pool<Sphere> shape(9, IN_HOST | IN_DEVICE);
-    Pool<ComputeBSDF> bsdf(6, IN_HOST | IN_DEVICE);
     Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
 
     shape.getHost()[0] = {0,{ 1e3f + 1.0f, 40.8f, 81.6f }, 1e3f};
@@ -315,34 +339,21 @@ void SmallPT(Render &render, size_t sample)
     shape.getHost()[7] = {0,{ 73.0f, 16.5f, 78.0f }, 16.5f};
     shape.getHost()[8] = {0,{ 50.0f, 681.6f - .27f,81.6f }, 600.0f};
 
-    bsdf.getHost()[0] = {
-        {},{ 1.0f, 0.0f, 0.0f }, { { 0.75f, 0.25f, 0.25f } },{ { 0.0f, 0.0f, 0.0f } },{ { 0.0f, 0.0f, 0.0f } }};
-    bsdf.getHost()[1] = {
-        {},{ 1.0f, 0.0f, 0.0f },{ { 0.25f, 0.25f, 0.75f } },{ { 0.0f, 0.0f, 0.0f } },{ { 0.0f, 0.0f, 0.0f } }};
-    bsdf.getHost()[2] = {
-        {},{ 1.0f, 0.0f, 0.0f },{ { 0.75f, 0.75f, 0.75f } },{ { 0.0f, 0.0f, 0.0f } },{ { 0.0f, 0.0f, 0.0f } }};
-    bsdf.getHost()[3] = {
-        {},{ 1.0f, 0.0f, 0.0f },{ { 0.0f, 0.0f, 0.0f } },{ { 0.0f, 0.0f, 0.0f } },{ { 0.0f, 0.0f, 0.0f } }};
-    bsdf.getHost()[4] = {
-        {},{ 0.0f, 1.0f, 0.0f },{ { 0.0f, 0.0f, 0.0f } },{ { 0.999f, 0.999f, 0.999f } },{ { 0.0f, 0.0f, 0.0f } }};
-    bsdf.getHost()[5] = {
-        {},{ 0.0f, 0.25f, 1.0f },{ { 0.0f, 0.0f, 0.0f } },{ { 0.999f, 0.999f, 0.999f } },{ { 0.999f, 0.999f, 0.999f } }};
     light.getHost()[0] = {{},{ { 12.0f, 12.0f, 12.0f } }};
 
     shape.copyToDevice();
-    bsdf.copyToDevice();
     light.copyToDevice();
 
     Pool<Object> object(9, IN_HOST | IN_DEVICE);
-    object.getHost()[0] = {shape.getDevice()    , bsdf.getDevice() + 0, nullptr};
-    object.getHost()[1] = {shape.getDevice() + 1, bsdf.getDevice() + 1, nullptr};
-    object.getHost()[2] = {shape.getDevice() + 2, bsdf.getDevice() + 2, nullptr};
-    object.getHost()[3] = {shape.getDevice() + 3, bsdf.getDevice() + 3, nullptr};
-    object.getHost()[4] = {shape.getDevice() + 4, bsdf.getDevice() + 2, nullptr};
-    object.getHost()[5] = {shape.getDevice() + 5, bsdf.getDevice() + 2, nullptr};
+    object.getHost()[0] = {shape.getDevice()    , picker.getDevice() + 0, nullptr};
+    object.getHost()[1] = {shape.getDevice() + 1, picker.getDevice() + 1, nullptr};
+    object.getHost()[2] = {shape.getDevice() + 2, picker.getDevice() + 2, nullptr};
+    object.getHost()[3] = {shape.getDevice() + 3, picker.getDevice() + 3, nullptr};
+    object.getHost()[4] = {shape.getDevice() + 4, picker.getDevice() + 2, nullptr};
+    object.getHost()[5] = {shape.getDevice() + 5, picker.getDevice() + 2, nullptr};
 
-    object.getHost()[6] = {shape.getDevice() + 6, bsdf.getDevice() + 4, nullptr};
-    object.getHost()[7] = {shape.getDevice() + 7, bsdf.getDevice() + 4, nullptr};
+    object.getHost()[6] = {shape.getDevice() + 6, picker.getDevice() + 4, nullptr};
+    object.getHost()[7] = {shape.getDevice() + 7, picker.getDevice() + 4, nullptr};
 
     object.getHost()[8] = {shape.getDevice() + 8, nullptr, light.getDevice()};
 
@@ -352,7 +363,7 @@ void SmallPT(Render &render, size_t sample)
     cam.getHost()[0] = {{50.0f, 52.0f, 169.9f},Vector(0.0f, -0.042612f, -1.0f).norm(), 1.9043f, 2.0213f};
     cam.copyToDevice();
 
-    render.init(object, cam, sample);
+    render.init(object, cam, factor.getIndexNodeList(), sample);
 }
 
 static Render render(W_WIDTH, W_HEIGHT);
@@ -361,7 +372,7 @@ void GLInitCallback()
 {
     //TwoBall(render, 1000);
     //CornellBox(render, 1000);
-    SmallPT(render, 100);
+    SmallPT(render, 1000);
 }
 const char * GLWindowTitle()
 {

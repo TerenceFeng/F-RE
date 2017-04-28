@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mem.h"
 #include "math.h"     // Math Library
 typedef Vec3<float> Vertex;
 typedef Vec3<float> Vector;
@@ -116,6 +117,7 @@ struct BSDFParam
 {
     Normal nr;
     Vector wo;
+    float u1, u2;
 
     Vector wi;
     Color f;
@@ -144,44 +146,17 @@ struct SpecularTransmission
     Color R;
 };
 
-#include <vector>
-#include <deque>
-class BSDFModelPool
-{
-    // (model type, model pointer)
-    std::vector<int> mtype;
-    std::deque<void *> mpool;
-public:
-    int CreateLambertian(Color R)
-    {
-        int id = (int)mtype.size();
-        mtype.push_back(0);
-        Pool<Lambertian> *p = new Pool<Lambertian>(1, IN_HOST | IN_DEVICE);
-        p->getHost()->R = R;
-        mpool.push_back(p);
-        return id;
-    }
-    int CreateSpecRefl(Color R)
-    {
-        int id = (int)mtype.size();
-        mtype.push_back(1);
-        Pool<SpecularReflection> *p = new Pool<SpecularReflection>(1, IN_HOST | IN_DEVICE);
-        p->getHost()->R = R;
-        mpool.push_back(p);
-        return id;
-    }
-};
-
 // BSDF strategies
-__device__ void BSDF_Lambertian(BSDFParam *param, const void *_model, float u1, float u2)
+typedef void(*BSDF_t)(BSDFParam *, const void *);
+__device__ void BSDF_Lambertian(BSDFParam *param, const void *_model)
 {
     const Lambertian &model = *(const Lambertian *)_model;
-    param->wi = UniformSampleHemisphere(u1, u2);
+    param->wi = UniformSampleHemisphere(param->u1, param->u2);
     if (param->wi.dot(param->nr) > 0.0f) param->wi = -param->wi;
     param->f.v = Vector::Scale(model.R.v, 1.0f / 3.14159f);
     param->pdf = 1.0f / 3.14159f;
 }
-__device__ void BSDF_SpecRefl(BSDFParam *param, const void *_model, float u1, float u2)
+__device__ void BSDF_SpecRefl(BSDFParam *param, const void *_model)
 {
     const SpecularReflection &model = *(const SpecularReflection *)_model;
     Vector nr = param->nr;
@@ -191,7 +166,7 @@ __device__ void BSDF_SpecRefl(BSDFParam *param, const void *_model, float u1, fl
     param->f.v = model.R.v;
     param->pdf = 1.0f;
 }
-__device__ void BSDF_SpecTrans(BSDFParam *param, const void *_model, float u1, float u2)
+__device__ void BSDF_SpecTrans(BSDFParam *param, const void *_model)
 {
     const SpecularTransmission &model = *(const SpecularTransmission *)_model;
     Vector nr = param->nr;
@@ -201,28 +176,102 @@ __device__ void BSDF_SpecTrans(BSDFParam *param, const void *_model, float u1, f
     param->f.v = model.R.v;
     param->pdf = 1.0f;
 }
-
-typedef void(*BSDF_t)(BSDFParam *, const void *, float, float);
 __device__ BSDF_t BSDFStrategy[] = {
     BSDF_Lambertian,
     BSDF_SpecRefl,
     BSDF_SpecTrans
 };
 
+// BSDF model management
+// id => strategy: int
+// id => model: void *
+// GPU:
+//      link memory:  [data_ptr, func_t] [data_ptr, func_t]
+//      model memory: [model0] [model1] ...
+enum bsdf_model_t
+{
+    LAMBERTIAN = 0, SPEC_REFL = 1, SPEC_TRANS = 2
+};
+struct _index_node // link model to model function
+{
+    void * mptr;
+    bsdf_model_t mfunc;
+};
+union _model_node
+{
+    Lambertian diff;
+    SpecularReflection refl;
+    SpecularTransmission trans;
+    _model_node()
+    {}
+};
+typedef int bsdf_handle_t;
+
+#include <cassert>
+class BSDFFactory
+{
+    Pool<_index_node> inode_list;
+    Pool<_model_node> mnode_list;
+    size_t pos, size;
+public:
+    BSDFFactory(size_t _size)
+        : pos(0), size(_size),
+        inode_list(_size, IN_DEVICE | IN_HOST),
+        mnode_list(_size, IN_DEVICE | IN_HOST)
+    {}
+    bsdf_handle_t createLambertian(Color R)
+    {
+        assert(pos < size);
+        // mptr will be filled in syncToDevice()
+        _index_node inode = {nullptr, LAMBERTIAN};
+        Lambertian mnode = {R};
+        inode_list.getHost()[pos] = inode;
+        mnode_list.getHost()[pos].diff = mnode;
+        return pos++;
+    }
+    bsdf_handle_t createSpecRefl(Color R)
+    {
+        assert(pos < size);
+        // mptr will be filled in syncToDevice()
+        _index_node inode = {nullptr, SPEC_REFL};
+        SpecularReflection mnode = {R};
+        inode_list.getHost()[pos] = inode;
+        mnode_list.getHost()[pos].refl = mnode;
+        return pos++;
+    }
+    bsdf_handle_t createSpecTrans(Color R)
+    {
+        assert(pos < size);
+        // mptr will be filled in syncToDevice()
+        _index_node inode = {nullptr, SPEC_TRANS};
+        SpecularTransmission mnode = {R};
+        inode_list.getHost()[pos] = inode;
+        mnode_list.getHost()[pos].trans = mnode;
+        return pos++;
+    }
+    void syncToDevice()
+    {
+        mnode_list.copyToDevice();
+        _model_node *mptr = mnode_list.getDevice();
+        for (size_t i = 0; i < inode_list.getSize(); ++i)
+        {
+            inode_list.getHost()[i].mptr = mptr + i;
+        }
+        inode_list.copyToDevice();
+    }
+    _index_node * getIndexNodeList()
+    {
+        return inode_list.getDevice();
+    }
+};
+
 struct ComputeBSDF
 {
     BSDFParam param;
 
-    // model number, type_id, func, %
-    //model_t model[3];
-    int model_id, model_func;
-    float ratio;
-
-    __device__ inline void compute(float pick, Normal nr, Vector wo, float u1, float u2)
+    __device__ inline void compute(_index_node &inode)
     {
-        param.nr = nr;
-        param.wo = wo;
-        BSDFStrategy[model_func](&param, &model_id, u1, u2);
+        BSDFStrategy[(int)inode.mfunc](&param, inode.mptr);
     }
     __device__ inline Color f() const
     {
@@ -235,6 +284,18 @@ struct ComputeBSDF
     __device__ inline Vector wi() const
     {
         return param.wi;
+    }
+};
+struct BSDFPicker
+{
+    bsdf_handle_t model[3];
+    float ratio[3];
+
+    __device__ size_t pick(float r)
+    {
+        if (r <= ratio[0]) return model[0];
+        if (r <= ratio[1]) return model[1];
+        return model[2];
     }
 };
 
@@ -270,7 +331,7 @@ struct ComputeLight
 struct Object
 {
     Shape_t *shape;
-    ComputeBSDF *bsdf;
+    BSDFPicker *bsdf;
     ComputeLight *light;
 };
 

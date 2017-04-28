@@ -87,7 +87,7 @@ __global__ void ray_depth(Color *color, Ray *ray,
 }
 __global__ void ray_distance(Ray *ray, Ray *ray2, Color *color,
                              const Object *object, const size_t nobj,
-                             curandState *_state)
+                             _index_node *inode_list, curandState *_state)
 {
     int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -135,8 +135,15 @@ __global__ void ray_distance(Ray *ray, Ray *ray2, Color *color,
         {
             if (obj->bsdf)
             {
-                ComputeBSDF bsdf = *obj->bsdf;
-                bsdf.compute(curand_uniform(&state), nr, -r->dir, curand_uniform(&state), curand_uniform(&state));
+                ComputeBSDF bsdf = {
+                    nr,
+                    -r->dir,
+                    curand_uniform(&state),
+                    curand_uniform(&state),
+                    {},{},0.0f
+                };
+                _index_node &inode = inode_list[obj->bsdf->pick(curand_uniform(&state))];
+                bsdf.compute(inode);
                 r2->pos = hit;
                 r2->dir = bsdf.wi();
                 r2->factor = bsdf.f();
@@ -152,7 +159,7 @@ __global__ void ray_distance(Ray *ray, Ray *ray2, Color *color,
 
 __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
                           const Object *object, const size_t nobj,
-                          curandState *_state)
+                          _index_node *inode_list, curandState *_state)
 {
     int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -199,9 +206,15 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
         {
             if (obj->bsdf)
             {
-                ComputeBSDF bsdf = *obj->bsdf;
-                bsdf.compute(curand_uniform(&state), nr, -r->dir,
-                             curand_uniform_double(&state), curand_uniform_double(&state));
+                ComputeBSDF bsdf = {
+                    nr,
+                    -r->dir,
+                    curand_uniform(&state),
+                    curand_uniform(&state),
+                    {},{},0.0f
+                };
+                _index_node &inode = inode_list[obj->bsdf->pick(curand_uniform(&state))];
+                bsdf.compute(inode);
                 r2->pos = hit;
                 r2->dir = bsdf.wi();
                 r2->factor = bsdf.f();
