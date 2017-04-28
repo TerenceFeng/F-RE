@@ -166,8 +166,12 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
 
-    curandState &state = _state[i];
+    //int _i = blockDim.x * threadIdx.y + threadIdx.x;
+    //__shared__ Object object[10];
+    //if (_i < 10) object[_i] = _object[_i];
+    //__syncthreads();
 
+    curandState &state = _state[i];
     Ray *r = ray2 + i;
     Ray *r2 = ray + i, *rtmp;
     Color *c = color + i;

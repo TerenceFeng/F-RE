@@ -16,7 +16,9 @@ public:
     Pool<Object> objs;
 };
 
+#ifdef USE_OPENGL
 #include "display.h"
+#endif
 
 Color Clamp(const Color &c)
 {
@@ -52,7 +54,7 @@ public:
         sample = samp;
         s = samp;
 
-        const int edge = 4;
+        const int edge = 8;
         dim3 blockD(edge, edge);
         dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
 
@@ -63,7 +65,7 @@ public:
         if (s == 0) return false;
         --s;
 
-        const int edge = 4;
+        const int edge = 8;
         dim3 blockD(edge, edge);
         dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
 
@@ -81,6 +83,7 @@ public:
         scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 50.0f / (float)sample);
 
         color.copyFromDevice();
+#ifdef USE_OPENGL
         //for (size_t i = 0; i < color.getSize(); ++i)
         //{
         //	data[i * 3] = clamp((color.getHost()[i].r)) * 255;
@@ -116,6 +119,7 @@ public:
         //	data[i * 3 + 1] = clamp((/*maxv.g - */color.getHost()[i].g) / maxv.g) * 255;
         //	data[i * 3 + 2] = clamp((/*maxv.b - */color.getHost()[i].b) / maxv.b) * 255;
         //}
+#endif
         CheckCUDAError(cudaGetLastError());
         CheckCUDAError(cudaDeviceSynchronize());
         return true;
@@ -174,6 +178,10 @@ public:
     float ratio()
     {
         return (float)W / H;
+    }
+    float progress()
+    {
+        return (float)(sample - s) / sample;
     }
 
     void done()
@@ -311,33 +319,35 @@ private:
 
 void SmallPT(Render &render, size_t sample)
 {
-    BSDFFactory factor(5);
+    BSDFFactory factor(6);
     factor.createLambertian({0.75f, 0.25f, 0.25f});
     factor.createLambertian({0.25f, 0.25f, 0.75f});
     factor.createLambertian({0.75f, 0.75f, 0.75f});
     factor.createLambertian({0.0f, 0.0f, 0.0f});
     factor.createSpecRefl({0.999f, 0.999f, 0.999f});
+    factor.createSpecTrans({0.999f, 0.999f, 0.999f});
     factor.syncToDevice();
-    Pool<BSDFPicker> picker(5, IN_DEVICE | IN_HOST);
+    Pool<BSDFPicker> picker(6, IN_DEVICE | IN_HOST);
     picker.getHost()[0] = {{0,0,0},{1.0f, 0.0f,0.0f}};
     picker.getHost()[1] = {{1,0,0},{1.0f, 0.0f,0.0f}};
     picker.getHost()[2] = {{2,0,0},{1.0f, 0.0f,0.0f}};
     picker.getHost()[3] = {{3,0,0},{1.0f, 0.0f,0.0f}};
     picker.getHost()[4] = {{0,4,0},{0.0f, 1.0f,0.0f}};
+    picker.getHost()[5] = {{5,0,0},{1.0f, 0.0f,0.0f}};
     picker.copyToDevice();
 
     Pool<Sphere> shape(9, IN_HOST | IN_DEVICE);
     Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
 
-    shape.getHost()[0] = {0,{ 1e3f + 1.0f, 40.8f, 81.6f }, 1e3f};
-    shape.getHost()[1] = {0,{ -1e3f + 99.0f, 40.8f, 81.6f }, 1e3f};
-    shape.getHost()[2] = {0,{ 50.0f, 40.8f, 1e3f }, 1e3f};
-    shape.getHost()[3] = {0,{ 50.0f, 40.8f, -1e3f + 170.0f }, 1e3f};
-    shape.getHost()[4] = {0,{ 50.0f, 1e3f, 81.6f }, 1e3f};
-    shape.getHost()[5] = {0,{ 50.0f, -1e3f + 81.6f, 81.6f }, 1e3f};
-    shape.getHost()[6] = {0,{ 27.0f, 16.5f, 47.0f }, 16.5f};
-    shape.getHost()[7] = {0,{ 73.0f, 16.5f, 78.0f }, 16.5f};
-    shape.getHost()[8] = {0,{ 50.0f, 681.6f - .27f,81.6f }, 600.0f};
+    shape.getHost()[0] = {1,{1e3f + 1.0f, 40.8f, 81.6f}, 1e3f};
+    shape.getHost()[1] = {1,{-1e3f + 99.0f, 40.8f, 81.6f}, 1e3f};
+    shape.getHost()[2] = {1,{50.0f, 40.8f, 1e3f}, 1e3f};
+    shape.getHost()[3] = {1,{50.0f, 40.8f, -1e3f + 170.0f}, 1e3f};
+    shape.getHost()[4] = {1,{50.0f, 1e3f, 81.6f}, 1e3f};
+    shape.getHost()[5] = {1,{50.0f, -1e3f + 81.6f, 81.6f}, 1e3f};
+    shape.getHost()[6] = {0,{27.0f, 16.5f, 47.0f}, 16.5f};
+    shape.getHost()[7] = {0,{73.0f, 16.5f, 78.0f}, 16.5f};
+    shape.getHost()[8] = {0,{50.0f, 681.6f - .27f,81.6f}, 600.0f};
 
     light.getHost()[0] = {{},{ { 12.0f, 12.0f, 12.0f } }};
 
@@ -353,7 +363,7 @@ void SmallPT(Render &render, size_t sample)
     object.getHost()[5] = {shape.getDevice() + 5, picker.getDevice() + 2, nullptr};
 
     object.getHost()[6] = {shape.getDevice() + 6, picker.getDevice() + 4, nullptr};
-    object.getHost()[7] = {shape.getDevice() + 7, picker.getDevice() + 4, nullptr};
+    object.getHost()[7] = {shape.getDevice() + 7, picker.getDevice() + 5, nullptr};
 
     object.getHost()[8] = {shape.getDevice() + 8, nullptr, light.getDevice()};
 
@@ -366,13 +376,33 @@ void SmallPT(Render &render, size_t sample)
     render.init(object, cam, factor.getIndexNodeList(), sample);
 }
 
+#ifndef USE_OPENGL
+
+int main(void)
+{
+    Render render(640, 480);
+    SmallPT(render, 500);
+    while (render.update(nullptr))
+    {
+        printf("\r%.2f%", render.progress() * 100.0f);
+    }
+    printf("\n");
+    render.display("image.ppm");
+    render.done();
+    return 0;
+}
+
+#endif
+
+#ifdef USE_OPENGL
+
 static Render render(W_WIDTH, W_HEIGHT);
 
 void GLInitCallback()
 {
     //TwoBall(render, 1000);
     //CornellBox(render, 1000);
-    SmallPT(render, 1000);
+    SmallPT(render, 500);
 }
 const char * GLWindowTitle()
 {
@@ -412,3 +442,5 @@ void GLDoneCallback()
 {
     render.done();
 }
+
+#endif

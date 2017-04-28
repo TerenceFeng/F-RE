@@ -80,12 +80,19 @@ __device__ void Normal_sphere(void *sphere, void *pos, void *normal)
     Normal &nr = *(Normal *)normal;
     nr = (p - s.center);// .norm();
 }
+__device__ void Normal_sphere2(void *sphere, void *pos, void *normal)
+{
+    Sphere &s = *(Sphere *)sphere;
+    Point &p = *(Point *)pos;
+    Normal &nr = *(Normal *)normal;
+    nr = (s.center - p);
+}
 
 typedef bool(*intersect_t)(const void *, void *, float *);
-__device__ intersect_t IntersectStrategy[1] = {Intersect_ray2sphere};
+__device__ intersect_t IntersectStrategy[] = {Intersect_ray2sphere, Intersect_ray2sphere};
 
 typedef void(*normal_t)(void *, void *, void *);
-__device__ normal_t NormalStrategy[1] = {Normal_sphere};
+__device__ normal_t NormalStrategy[] = {Normal_sphere, Normal_sphere2};
 
 struct HitParam
 {
@@ -129,21 +136,13 @@ struct Lambertian
 {
     Color R;
 };
-//struct _FresnelConductor
-//{
-//	Color eta, k;
-//};
-//struct _FresnelDielectric
-//{
-//	float eta_i, eta_t;
-//};
 struct SpecularReflection
 {
     Color R;
 };
 struct SpecularTransmission
 {
-    Color R;
+    Color T;
 };
 
 // BSDF strategies
@@ -152,7 +151,7 @@ __device__ void BSDF_Lambertian(BSDFParam *param, const void *_model)
 {
     const Lambertian &model = *(const Lambertian *)_model;
     param->wi = UniformSampleHemisphere(param->u1, param->u2);
-    if (param->wi.dot(param->nr) > 0.0f) param->wi = -param->wi;
+    if (param->wi.dot(param->nr) < 0.0f) param->wi = -param->wi;
     param->f.v = Vector::Scale(model.R.v, 1.0f / 3.14159f);
     param->pdf = 1.0f / 3.14159f;
 }
@@ -162,7 +161,7 @@ __device__ void BSDF_SpecRefl(BSDFParam *param, const void *_model)
     Vector nr = param->nr;
     Vector wo = param->wo;
     nr.norm();
-    param->wi = Vector(nr).scale(wo.dot(nr)).sub(wo).scale(2.0f).add(wo).norm();
+    param->wi = Vector(nr).scale(wo.dot(nr)).scale(2.0f).sub(wo).norm();
     param->f.v = model.R.v;
     param->pdf = 1.0f;
 }
@@ -172,9 +171,25 @@ __device__ void BSDF_SpecTrans(BSDFParam *param, const void *_model)
     Vector nr = param->nr;
     Vector wo = param->wo;
     nr.norm();
-    param->wi = -Vector(nr).scale(wo.dot(nr)).sub(wo).scale(2.0f).add(wo).norm();
-    param->f.v = model.R.v;
-    param->pdf = 1.0f;
+
+    bool into = wo.dot(nr) > 0.0f;
+    float nc = 1.0f;
+    float nt = 1.5f;
+    float nnt = into ? nc / nt : nt / nc;
+    float ddn = wo.dot(into ? -nr : nr);
+    float cos2t = 1 - nnt*nnt*(1 - ddn*ddn);
+    if (cos2t < 0) // Total internal reflection
+    {
+        param->wi = Vector(nr).scale(wo.dot(nr)).scale(2.0f).sub(wo).norm();
+        param->f.v = model.T.v;
+        param->pdf = 1.0f;
+    }
+    else
+    {
+        param->wi = (wo.scale(-nnt) - nr.scale((into ? 1.0f : -1.0f)*(ddn*nnt + sqrt(cos2t)))).norm();
+        param->f.v = model.T.v;
+        param->pdf = 1.0f;
+    }
 }
 __device__ BSDF_t BSDFStrategy[] = {
     BSDF_Lambertian,
@@ -183,6 +198,7 @@ __device__ BSDF_t BSDFStrategy[] = {
 };
 
 // BSDF model management
+
 // id => strategy: int
 // id => model: void *
 // GPU:
@@ -239,12 +255,12 @@ public:
         mnode_list.getHost()[pos].refl = mnode;
         return pos++;
     }
-    bsdf_handle_t createSpecTrans(Color R)
+    bsdf_handle_t createSpecTrans(Color T)
     {
         assert(pos < size);
         // mptr will be filled in syncToDevice()
         _index_node inode = {nullptr, SPEC_TRANS};
-        SpecularTransmission mnode = {R};
+        SpecularTransmission mnode = {T};
         inode_list.getHost()[pos] = inode;
         mnode_list.getHost()[pos].trans = mnode;
         return pos++;
@@ -271,7 +287,13 @@ struct ComputeBSDF
 
     __device__ inline void compute(_index_node &inode)
     {
-        BSDFStrategy[(int)inode.mfunc](&param, inode.mptr);
+        //BSDFStrategy[(int)inode.mfunc](&param, inode.mptr);
+        if (inode.mfunc == 0)
+            BSDF_Lambertian(&param, inode.mptr);
+        else if (inode.mfunc == 1)
+            BSDF_SpecRefl(&param, inode.mptr);
+        else
+            BSDF_SpecTrans(&param, inode.mptr);
     }
     __device__ inline Color f() const
     {
