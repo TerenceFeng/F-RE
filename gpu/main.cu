@@ -10,11 +10,7 @@
 
 #include "mem.h"
 
-class Scene
-{
-public:
-    Pool<Object> objs;
-};
+#define USE_OPENGL
 
 #ifdef USE_OPENGL
 #include "display.h"
@@ -337,6 +333,7 @@ void SmallPT(Render &render, size_t sample)
     picker.copyToDevice();
 
     Pool<Sphere> shape(9, IN_HOST | IN_DEVICE);
+    Pool<struct Rectangle> rect(1, IN_HOST | IN_DEVICE);
     Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
 
     shape.getHost()[0] = {1,{1e3f + 1.0f, 40.8f, 81.6f}, 1e3f};
@@ -348,13 +345,14 @@ void SmallPT(Render &render, size_t sample)
     shape.getHost()[6] = {0,{27.0f, 16.5f, 47.0f}, 16.5f};
     shape.getHost()[7] = {0,{73.0f, 16.5f, 78.0f}, 16.5f};
     shape.getHost()[8] = {0,{50.0f, 681.6f - .27f,81.6f}, 600.0f};
-
+    rect.getHost()[0] = {2, {10.0f, 16.5f, 78.0f}, {20.0f, 0.0f, 0.0f}, {0.0f, 20.0f, 0.0f}};
     light.getHost()[0] = {{},{ { 12.0f, 12.0f, 12.0f } }};
 
     shape.copyToDevice();
+    rect.copyToDevice();
     light.copyToDevice();
 
-    Pool<Object> object(9, IN_HOST | IN_DEVICE);
+    Pool<Object> object(10, IN_HOST | IN_DEVICE);
     object.getHost()[0] = {shape.getDevice()    , picker.getDevice() + 0, nullptr};
     object.getHost()[1] = {shape.getDevice() + 1, picker.getDevice() + 1, nullptr};
     object.getHost()[2] = {shape.getDevice() + 2, picker.getDevice() + 2, nullptr};
@@ -363,7 +361,8 @@ void SmallPT(Render &render, size_t sample)
     object.getHost()[5] = {shape.getDevice() + 5, picker.getDevice() + 2, nullptr};
 
     object.getHost()[6] = {shape.getDevice() + 6, picker.getDevice() + 4, nullptr};
-    object.getHost()[7] = {shape.getDevice() + 7, picker.getDevice() + 5, nullptr};
+    object.getHost()[7] = {shape.getDevice() + 7, picker.getDevice() + 4, nullptr};
+    object.getHost()[9] = {rect.getDevice(), picker.getDevice() + 1, nullptr};
 
     object.getHost()[8] = {shape.getDevice() + 8, nullptr, light.getDevice()};
 
@@ -392,9 +391,7 @@ int main(void)
     return 0;
 }
 
-#endif
-
-#ifdef USE_OPENGL
+#else
 
 static Render render(W_WIDTH, W_HEIGHT);
 

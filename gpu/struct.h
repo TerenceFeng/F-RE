@@ -51,6 +51,12 @@ struct Sphere
     Vertex center;
     float radius;
 };
+struct Rectangle
+{
+    int strategy;
+    Point pos;
+    Vector a, b;
+};
 
 __device__ bool Intersect_ray2sphere(const void *ray, void *sphere, float *t)
 {
@@ -73,6 +79,38 @@ __device__ bool Intersect_ray2sphere(const void *ray, void *sphere, float *t)
     }
     return *t != 0.0f;
 }
+__device__ bool Intersect_ray2rectangle(const void *ray, void *rectangle, float *t)
+{
+    Ray &r = *(Ray *)ray;
+    struct Rectangle &rect = *(struct Rectangle *)rectangle;
+
+    Normal nr = Vector::Cross(rect.a, rect.b).norm();
+    float _t = (rect.pos - r.pos).dot(nr) / r.dir.dot(nr);
+    if (_t < 1e-5f)
+        return false;
+
+    Point p = r.pos + Vector::Scale(r.dir, _t);
+    Vector d = p - rect.pos;
+    float alen2 = rect.a.dot(rect.a);
+    float blen2 = rect.b.dot(rect.b);
+    //alen2 *= alen2;
+    //blen2 *= blen2;
+
+    float ddota = d.dot(rect.a);
+    if (ddota < 0.0 || ddota > alen2) return false;
+
+    float ddotb = d.dot(rect.b);
+    if (ddotb < 0.0 || ddotb > blen2) return false;
+
+    *t = _t;
+    return true;
+}
+typedef bool(*intersect_t)(const void *, void *, float *);
+__device__ intersect_t IntersectStrategy[] = {
+    Intersect_ray2sphere,
+    Intersect_ray2sphere,
+    Intersect_ray2rectangle};
+
 __device__ void Normal_sphere(void *sphere, void *pos, void *normal)
 {
     Sphere &s = *(Sphere *)sphere;
@@ -87,12 +125,20 @@ __device__ void Normal_sphere2(void *sphere, void *pos, void *normal)
     Normal &nr = *(Normal *)normal;
     nr = (s.center - p);
 }
+__device__ void Normal_rectangle(void *rectangle, void *pos, void *normal)
+{
+    struct Rectangle &rect = *(struct Rectangle *)rectangle;
+    Point &p = *(Point *)pos;
+    Normal &nr = *(Normal *)normal;
+    nr = Vector::Cross(rect.a, rect.b).norm();
+}
 
-typedef bool(*intersect_t)(const void *, void *, float *);
-__device__ intersect_t IntersectStrategy[] = {Intersect_ray2sphere, Intersect_ray2sphere};
 
 typedef void(*normal_t)(void *, void *, void *);
-__device__ normal_t NormalStrategy[] = {Normal_sphere, Normal_sphere2};
+__device__ normal_t NormalStrategy[] = {
+    Normal_sphere,
+    Normal_sphere2,
+    Normal_rectangle};
 
 struct HitParam
 {
