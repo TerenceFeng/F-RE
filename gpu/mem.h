@@ -14,6 +14,7 @@ class Pool
 {
     size_t size, flag;
     T *host_p, *device_p;
+
 public:
     Pool(size_t _size, size_t _flag = 0u)
         : size(_size), flag(_flag), host_p(nullptr), device_p(nullptr)

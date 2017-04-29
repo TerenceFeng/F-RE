@@ -8,6 +8,8 @@
 #include <curand.h>
 #include <curand_kernel.h>
 
+#include "grid.h"
+
 __global__ void init_rand(curandState *state)
 {
     int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
@@ -16,6 +18,7 @@ __global__ void init_rand(curandState *state)
     int i = y * w + x;
     curand_init(0, 0, 0, state + i);
 }
+
 __global__ void init_ray(Ray *ray, const Camera *camera, curandState *_state)
 {
     int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
@@ -32,6 +35,7 @@ __global__ void init_ray(Ray *ray, const Camera *camera, curandState *_state)
     r.dir.norm();
     ray[i] = r;
 }
+
 __global__ void ray2color(Color *color, const Ray *ray)
 {
     int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
@@ -113,6 +117,7 @@ __global__ void ray_distance(Ray *ray, Ray *ray2, Color *color,
         {
             float t = 1e10;
             ComputeHit ch;
+            /* TODO: */
             for (int n = 0; n < nobj; ++n)
             {
                 ch.compute(r, object[n].shape);
@@ -184,16 +189,10 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
         Normal nr;
         {
             float t = 1e10;
-            ComputeHit ch;
-            for (int n = 0; n < nobj; ++n)
-            {
-                ch.compute(r, object[n].shape);
-                if (ch.isHit() && ch.t() < t)
-                {
-                    t = ch.t();
-                    obj = object + n;
-                }
-            }
+            /* TODO */
+
+            intersect_with_grid(nullptr, r, obj, &t);
+
             if (obj)
             {
                 hit = r->pos + Vector::Scale(r->dir, t);
