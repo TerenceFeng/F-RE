@@ -172,7 +172,6 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
     int i = y * w + x;
 
     curandState &state = _state[i];
-
     Ray *r = ray2 + i;
     Ray *r2 = ray + i, *rtmp;
     Color *c = color + i;
