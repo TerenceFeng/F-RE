@@ -41,7 +41,7 @@ struct Camera
     float fov_h, fov_v; // radius
 };
 
-// ---------------- Shape ----------------
+// ---------------- Shape & Texture ----------------
 
 typedef void Shape_t;
 
@@ -56,6 +56,13 @@ struct Rectangle
     int strategy;
     Point pos;
     Vector a, b;
+    Color *tex; // 100x100
+};
+struct Triangle
+{
+    int strategy;
+    Point p1, p2, p3;
+    Color *tex; // 100x100
 };
 
 __device__ bool Intersect_ray2sphere(const void *ray, void *sphere, float *t)
@@ -93,8 +100,6 @@ __device__ bool Intersect_ray2rectangle(const void *ray, void *rectangle, float 
     Vector d = p - rect.pos;
     float alen2 = rect.a.dot(rect.a);
     float blen2 = rect.b.dot(rect.b);
-    //alen2 *= alen2;
-    //blen2 *= blen2;
 
     float ddota = d.dot(rect.a);
     if (ddota < 0.0 || ddota > alen2) return false;
@@ -105,11 +110,47 @@ __device__ bool Intersect_ray2rectangle(const void *ray, void *rectangle, float 
     *t = _t;
     return true;
 }
+__device__ bool Intersect_ray2triangle(const void *_ray, void *triangle, float *t)
+{
+    Ray &ray = *(Ray *)_ray;
+    struct Triangle &tri = *(struct Triangle *)triangle;
+
+    float a = tri.p1.x - tri.p2.x, b = tri.p1.x - tri.p3.x, c = ray.dir.x, d = tri.p1.x - ray.pos.x;
+    float e = tri.p1.y - tri.p2.y, f = tri.p1.y - tri.p3.y, g = ray.dir.y, h = tri.p1.y - ray.pos.y;
+    float i = tri.p1.z - tri.p2.z, j = tri.p1.z - tri.p3.z, k = ray.dir.z, l = tri.p1.z - ray.pos.z;
+
+    float m = f * k - g * j, n = h * k - g * l, p = f * l - h * j;
+    float q = g * i - e * k, s = e * j - f * i;
+
+    float inv_denom = 1.0f / (a * m + b * q + c * s);
+
+    float e1 = d * m - b * n - c * p;
+    float beta = e1 * inv_denom;
+
+    if (beta < 0)
+        return false;
+
+    float r = e * l - h * i;
+    float e2 = a * n + d * q + c * r;
+    float gamma = e2 * inv_denom;
+
+    if (gamma < 0 || beta + gamma > 1) return false;
+
+    float e3 = a * p - b * r + d * s;
+    float _t = e3 * inv_denom;
+
+    if (_t < 1e-5f) return false;
+
+    *t = _t;
+    return true;
+}
 typedef bool(*intersect_t)(const void *, void *, float *);
 __device__ intersect_t IntersectStrategy[] = {
     Intersect_ray2sphere,
     Intersect_ray2sphere,
-    Intersect_ray2rectangle};
+    Intersect_ray2rectangle,
+    Intersect_ray2triangle
+};
 
 __device__ void Normal_sphere(void *sphere, void *pos, void *normal)
 {
@@ -132,13 +173,61 @@ __device__ void Normal_rectangle(void *rectangle, void *pos, void *normal)
     Normal &nr = *(Normal *)normal;
     nr = Vector::Cross(rect.a, rect.b).norm();
 }
-
+__device__ void Normal_triangle(void *triangle, void *pos, void *normal)
+{
+    struct Triangle &tri = *(struct Triangle *)triangle;
+    Point &p = *(Point *)pos;
+    Normal &nr = *(Normal *)normal;
+    Vector a = tri.p2 - tri.p1, b = tri.p3 - tri.p1;
+    nr = Vector::Cross(a, b).norm();
+}
 
 typedef void(*normal_t)(void *, void *, void *);
 __device__ normal_t NormalStrategy[] = {
     Normal_sphere,
     Normal_sphere2,
-    Normal_rectangle};
+    Normal_rectangle,
+    Normal_triangle
+};
+
+__device__ Color Shader_simple(void *shape, void *pos, void *normal, Color *factor)
+{
+    return *factor;
+}
+__device__ Color Shader_rectangle(void *rectangle, void *pos, void *normal, Color *factor)
+{
+    Point &p = *(Point *)pos;
+    struct Rectangle &rect = *(struct Rectangle *)rectangle;
+    if (!rect.tex) return *factor;
+
+    int x = 100.0f * (p - rect.pos).dot(rect.a) / rect.a.dot(rect.a);
+    int y = 100.0f * (p - rect.pos).dot(rect.b) / rect.b.dot(rect.b);
+    x = max(0, min(99, x));
+    y = max(0, min(99, y));
+    return Vector::Mul(rect.tex[100 * y + x].v, factor->v);
+}
+__device__ Color Shader_triangle(void *triangle, void *pos, void *normal, Color *factor)
+{
+    Point &p = *(Point *)pos;
+    struct Triangle &tri = *(struct Triangle *)triangle;
+    if (!tri.tex) return *factor;
+
+    Vector p12 = tri.p2 - tri.p1;
+    Vector p23 = tri.p3 - tri.p2;
+    int x = 100.0f * (p - tri.p1).dot(p12) / p12.dot(p12);
+    int y = 100.0f * (p - tri.p2).dot(p23) / p23.dot(p23);
+    x = max(0, min(99, x));
+    y = max(0, min(99, y));
+    return Vector::Mul(tri.tex[100 * y + x].v, factor->v);
+}
+
+typedef Color(*shader_t)(void *, void *, void *, Color *);
+__device__ shader_t ShaderStrategy[] = {
+    Shader_simple,
+    Shader_simple,
+    Shader_rectangle,
+    Shader_triangle
+};
 
 struct HitParam
 {

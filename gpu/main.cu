@@ -334,6 +334,7 @@ void SmallPT(Render &render, size_t sample)
 
     Pool<Sphere> shape(9, IN_HOST | IN_DEVICE);
     Pool<struct Rectangle> rect(1, IN_HOST | IN_DEVICE);
+    Pool<struct Triangle> tri(1, IN_HOST | IN_DEVICE);
     Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
 
     shape.getHost()[0] = {1,{1e3f + 1.0f, 40.8f, 81.6f}, 1e3f};
@@ -345,11 +346,25 @@ void SmallPT(Render &render, size_t sample)
     shape.getHost()[6] = {0,{27.0f, 16.5f, 47.0f}, 16.5f};
     shape.getHost()[7] = {0,{73.0f, 16.5f, 78.0f}, 16.5f};
     shape.getHost()[8] = {0,{50.0f, 681.6f - .27f,81.6f}, 600.0f};
-    rect.getHost()[0] = {2, {10.0f, 16.5f, 78.0f}, {20.0f, 0.0f, 0.0f}, {0.0f, 20.0f, 0.0f}};
+    Pool<Color> tex(10000, IN_HOST | IN_DEVICE);
+    for (int y = 0; y < 100; ++y)
+    {
+        for (int x = 0; x < 100; ++x)
+        {
+            tex.getHost()[y * 100 + x].v =
+                ((x / 10 + y / 10) % 2 == 1) ?
+                Vector(1.0f, 1.0f, 1.0f) :
+                Vector(0.1f, 0.1f, 0.1f);
+        }
+    }
+    tex.copyToDevice();
+    rect.getHost()[0] = {2,{10.0f, 16.5f, 78.0f},{20.0f, 0.0f, 0.0f},{0.0f, 20.0f, 0.0f}, tex.getDevice()};
+    tri.getHost()[0] = {3,{10.0f, 16.5f, 90.0f},{50.0f, 16.5f, 90.0f},{50.0f, 46.5f, 90.0f}, tex.getDevice()};
     light.getHost()[0] = {{},{ { 12.0f, 12.0f, 12.0f } }};
 
     shape.copyToDevice();
     rect.copyToDevice();
+    tri.copyToDevice();
     light.copyToDevice();
 
     Pool<Object> object(10, IN_HOST | IN_DEVICE);

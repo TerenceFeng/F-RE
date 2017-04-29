@@ -7,6 +7,10 @@
 #include <ctime>
 #include <curand.h>
 #include <curand_kernel.h>
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
+
+#include "struct.h"
 
 __global__ void init_rand(curandState *state)
 {
@@ -216,9 +220,11 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
                 bsdf.compute(inode);
                 r2->pos = hit;
                 r2->dir = bsdf.wi();
-                r2->factor = bsdf.f();
-                r2->factor.v.mul(r->factor.v);
-                r2->factor.v.scale(bsdf.pdf());
+                // shader
+                int strategy = *(int *)obj->shape;
+                Color cl = bsdf.f();
+                cl.v.mul(r->factor.v).scale(bsdf.pdf());
+                r2->factor = ShaderStrategy[strategy](obj->shape, &hit, &nr, &cl);
             }
             else
                 r2->factor.v.zero();
@@ -226,11 +232,12 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
             if (obj->light)
             {
                 ComputeLight light = *obj->light;
-                Color cv;
                 light.compute(hit, -r->dir);
-                cv = light.L();
+
+                Color cv = light.L();
                 cv.v.mul(r->factor.v);
                 (*c).v += cv.v;
+
                 // stop when hit light
                 r2->factor.v.zero();
             }
