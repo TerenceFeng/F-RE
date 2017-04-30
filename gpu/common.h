@@ -9,7 +9,7 @@
 #define CheckCUDAError(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = true)
 {
-    static char buffer[512];
+    // static char buffer[512];
     if (code != cudaSuccess)
     {
         fprintf(stderr, "\033[31mGPUassert\033[0m: %s %s %d\n", cudaGetErrorString(code), file, line);

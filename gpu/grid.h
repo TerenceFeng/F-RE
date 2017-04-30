@@ -7,65 +7,64 @@
 #include "struct.h"
 #include "mem.h"
 
-struct BBox
-{
-    float x0 = FLT_MAX, y0 = FLT_MAX, z0 = FLT_MAX,
-		  x1 = FLT_MAX, y1 = FLT_MAX, z1 = FLT_MAX;
-};
 
-struct Grid
-{
-    Pool<Object *> cells;
-    Pool<int> cells_size;
-	float x0 = FLT_MAX, y0 = FLT_MAX, z0 = FLT_MAX,
-		  x1 = FLT_MAX, y1 = FLT_MAX, z1 = FLT_MAX;
-	int nx, ny, nz;
-    Grid():
-        cells(0),
-        cells_size(0)
-    {}
-    Grid(size_t _size):
-        cells(_size),
-        cells_size(_size)
-    {}
-};
 
 __device__ __host__ BBox
 get_bounded_box(const Object& obj)
 {
-    return BBox();
+	switch (*(int *)obj.shape)
+	{
+        case 0:
+        case 1: {
+                    Sphere &s = *(Sphere *)obj.shape;
+
+                    float dist = sqrtf(3 * s.radius * s.radius);
+                    return {s.center.x - dist, s.center.y - dist, s.center.z - dist,
+                            s.center.x + dist, s.center.y + dist, s.center.z + dist};
+                }
+        case 2: {
+                    Rectangle &r = *(Rectangle *)obj.shape;
+                    Point p0 = r.pos;
+                    Point p1 = r.pos + r.a;
+                    Point p2 = r.pos + r.b;
+                    Point p3 = p1 + r.b;
+
+                    return {
+                            fminf(fminf(p0.x, p1.x), fminf(p2.x, p3.x)),
+                            fminf(fminf(p0.y, p1.y), fminf(p2.y, p3.y)),
+                            fminf(fminf(p0.z, p1.z), fminf(p2.z, p3.z)),
+                            fmaxf(fmaxf(p0.x, p1.x), fmaxf(p2.x, p3.x)),
+                            fmaxf(fmaxf(p0.y, p1.y), fmaxf(p2.y, p3.y)),
+                            fmaxf(fmaxf(p0.z, p1.z), fmaxf(p2.z, p3.z))
+                            };
+                }
+        default:
+                return BBox();
+    }
 }
 
-__device__ bool
-inside(Grid* grid, const Vec3<float>& v)
-{
-    return (v.x >= grid->x0 && v.y >= grid->y0 && v.z >= grid->z0 &&
-            v.x <= grid->x1 && v.y <= grid->y1 && v.z <= grid->z1);
-}
-
-__global__ void count_single_cell_kernel(Object *objs, int size, int *cells_count,
-                                            int nx, int ny, int nz,
+__global__ void count_single_cell_kernel(Object *objs, int num_objects, int *cells_count,
+                                            int nx, int ny, int nz, int num_cells,
                                             int x0, int y0, int z0, int x1, int y1, int z1)
 {
 
     int ix = blockDim.x * blockIdx.x + threadIdx.x;
     int iy = blockDim.y * blockIdx.y + threadIdx.y;
-    // int iz = blockDim.z * blockIdx.z + threadIdx.z;
+
 
     /* boundry check */
-    if (ix >= nx || iy >= ny/*  || iz >= nz */)
+    if (ix >= nx || iy >= ny)
         return;
 
-    // int index = ix + nx * iy + nx * ny * iz;
     int index = ix + nx * iy;
     int offset = nx * ny;
 
-    while (index < size)
+    while (index < num_cells)
     {
 
         int local_count = 0;
 
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < num_objects; i++)
         {
             const BBox b = get_bounded_box(objs[i]);
 
@@ -83,33 +82,31 @@ __global__ void count_single_cell_kernel(Object *objs, int size, int *cells_coun
             }
         }
 
-        index += nx * ny;
         cells_count[index] = local_count;
+		index += offset;
     }
 
 }
 
-__global__ void setup_single_cell_kernel(Object *objs, int size, Object **cells,
-                                int nx, int ny, int nz,
+__global__ void setup_single_cell_kernel(Object *objs, int num_objects, Object **cells,
+                                int nx, int ny, int nz, int num_cells,
                                 int x0, int y0, int z0, int x1, int y1, int z1)
 {
     int ix = blockDim.x * blockIdx.x + threadIdx.x;
     int iy = blockDim.y * blockIdx.y + threadIdx.y;
-    // int iz = blockDim.z * blockIdx.z + threadIdx.z;
 
     /* boundry check */
-    if (ix >= nx || iy >= ny/*  || iz >= nz */)
+    if (ix >= nx || iy >= ny)
         return;
 
-    // int index = ix + nx * iy + nx * ny * iz;
     int index = ix + nx * iy;
     int offset = nx * ny;
 
-    while (index < size)
+    while (index < num_cells)
     {
 
         int local_count = 0;
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < num_objects; i++)
         {
             const BBox b = get_bounded_box(objs[i]);
 
@@ -132,88 +129,120 @@ __global__ void setup_single_cell_kernel(Object *objs, int size, Object **cells,
     }
 }
 
-Grid
-setup_cells(std::vector<Object>& objs)
+
+class Grid
 {
-    std::vector<BBox> bboxs;
-    BBox obj_bbox;
+public:
+    Pool<Object *> cells;
+    Pool<int> cells_size;
+	float x0 = FLT_MAX, y0 = FLT_MAX, z0 = FLT_MAX,
+		  x1 = FLT_MIN, y1 = FLT_MIN, z1 = FLT_MIN;
+	int nx, ny, nz;
+    Grid():
+        cells(0),
+        cells_size(0)
+    {}
 
-    Grid grid;
+	void swap(Grid &rhs)
+	{
+		cells = rhs.cells;
+		cells_size = rhs.cells_size;
+		x0 = rhs.x0; y0 = rhs.y0; z0 = rhs.z0;
+		x1 = rhs.x1; y1 = rhs.y1; z1 = rhs.z1;
+		nx = rhs.nx; ny = rhs.ny; nz = rhs.nz;
+	}
 
-    for (int i = 0; i < objs.size(); i++)
+    Grid(Pool<Object>& objs):
+        cells(0),
+        cells_size(0)
     {
-        obj_bbox = get_bounded_box(objs[i]);
-        if (obj_bbox.x0 < grid.x0) grid.x0 = obj_bbox.x0;
-        if (obj_bbox.y0 < grid.y0) grid.y0 = obj_bbox.y0;
-        if (obj_bbox.z0 < grid.z0) grid.z0 = obj_bbox.z0;
-        if (obj_bbox.x1 > grid.x1) grid.x1 = obj_bbox.x1;
-        if (obj_bbox.y1 > grid.y1) grid.y1 = obj_bbox.y1;
-        if (obj_bbox.z1 > grid.z1) grid.z1 = obj_bbox.z1;
-        bboxs.push_back(obj_bbox);
+        std::vector<BBox> bboxs;
+        BBox obj_bbox;
+
+        int num_objects = objs.getSize();
+
+        for (int i = 0; i < num_objects; i++)
+        {
+            obj_bbox = get_bounded_box(objs.getHost()[i]);
+            if (obj_bbox.x0 < x0) x0 = obj_bbox.x0;
+            if (obj_bbox.y0 < y0) y0 = obj_bbox.y0;
+            if (obj_bbox.z0 < z0) z0 = obj_bbox.z0;
+            if (obj_bbox.x1 > x1) x1 = obj_bbox.x1;
+            if (obj_bbox.y1 > y1) y1 = obj_bbox.y1;
+            if (obj_bbox.z1 > z1) z1 = obj_bbox.z1;
+            bboxs.push_back(obj_bbox);
+        }
+
+        float wx = x1 - x0;
+        float wy = y1 - y0;
+        float wz = z1 - z0;
+        const float multiplier = 2.0;
+        float s = powf(wx * wy * wz / num_objects, 0.33333);
+        nx = multiplier * wx / s + 1;
+        ny = multiplier * wy / s + 1;
+        nz = multiplier * wz / s + 1;
+
+        int num_cells = nx * ny * nz;
+
+        /* construct cells and cells_size */
+
+        Pool<Object *> _cells(num_cells, IN_HOST | IN_DEVICE);
+        cells.swap(_cells);
+        Pool<int> _cells_size(num_cells, IN_HOST | IN_DEVICE);
+        cells_size.swap(_cells_size);
+
+        /* setup kernel dimension */
+        const int BLOCK_WIDTH = 8;
+        dim3 gridDim((nx + BLOCK_WIDTH - 1) / BLOCK_WIDTH, (ny + BLOCK_WIDTH - 1) / BLOCK_WIDTH);
+        dim3 blockDim(BLOCK_WIDTH, BLOCK_WIDTH);
+
+        /* count number of objects in each cell */
+        printf("MARK: ready to count number of cells\n");
+        count_single_cell_kernel<<<gridDim, blockDim>>>(objs.getDevice(), num_objects, cells_size.getDevice(),
+                                                        nx, ny, nz, num_cells,
+                                                        x0, y0, z0,
+                                                        x1, y1, z1);
+        CheckCUDAError(cudaGetLastError());
+        printf("MARK: counting number of cells\n");
+		cells_size.copyFromDevice();
+
+
+        /* allocate space for cells */
+		printf("MAKR: allocating space for cells\n");
+        for (int i = 0; i < num_cells; i++)
+		{
+			if (cells_size.getHost()[i] == 0)
+			{
+				printf("null cell ");
+				continue;
+			}
+			printf("%d %d ", i, cells_size.getHost()[i]);
+            CheckCUDAError(cudaMalloc((void **)(cells.getHost() + i), cells_size.getHost()[i] * sizeof(Object *)));
+		cells.copyToDevice();
+		}
+
+
+        printf("MARK: ready to set up cells\n");
+        setup_single_cell_kernel<<<gridDim, blockDim>>>(objs.getDevice(), objs.getSize(), cells.getDevice(),
+                                                        nx, ny, nz, num_cells,
+                                                        x0, y0, z0,
+                                                        x1, y1, z1);
+        CheckCUDAError(cudaGetLastError());
+        printf("MARK: setting up cells\n");
+
     }
 
-    int num_objects = objs.size();
-    float wx = grid.x1 - grid.x0;
-    float wy = grid.y1 - grid.y0;
-    float wz = grid.z1 - grid.z0;
-    const float multiplier = 2.0;
-    float s = powf(wx * wy * wz / num_objects, 0.33333);
-    grid.nx = multiplier * wx / s + 1;
-    grid.ny = multiplier * wy / s + 1;
-    grid.nz = multiplier * wz / s + 1;
-
-    int num_cells = grid.nx * grid.ny * grid.nz;
-
-    grid.cells = Pool<Object *>(num_cells);
-    grid.cells_size = Pool<int>(num_cells);
-
-    /* setup kernel dimension */
-    const int BLOCK_WIDTH = 16;
-    dim3 gridDim(grid.nx / BLOCK_WIDTH, grid.ny / BLOCK_WIDTH);
-    dim3 blockDim(BLOCK_WIDTH, BLOCK_WIDTH);
-
-    /* convert vector to array and copy to device*/
-    Pool<Object> objs_arr(num_objects);
-    objs_arr.getHost() = &objs[0];
-    objs_arr.copyToDevice();
-
-
-    /* count number of objects in each cell */
-    count_single_cell_kernel<<<gridDim, blockDim>>>(objs_arr.getDevice(), num_objects, grid.cells_size.getDevice(),
-                                                    grid.nx, grid.ny, grid.nz,
-                                                    grid.x0, grid.y0, grid.z0,
-                                                    grid.x1, grid.y1, grid.z1);
-
-    grid.cells_size.copyFromDevice();
-
-
-    /* allocate space for cells */
-    for (int i = 0; i < num_cells; i++)
-        CheckCUDAError(cudaMalloc((void **)&grid.cells.getDevice()[i], grid.cells_size.getHost()[i]));
-
-    /* TODO: setup dimension
-        * cell width*/
-    setup_single_cell_kernel<<<gridDim, blockDim>>>(objs_arr.getDevice(), objs.size(), grid.cells.getDevice(),
-                                                    grid.nx, grid.ny, grid.nz,
-                                                    grid.x0, grid.y0, grid.z0,
-                                                    grid.x1, grid.y1, grid.z1);
-
-    for (int i = 0; i < num_cells; i++)
-    {
-        CheckCUDAError(cudaMemcpy((void **)&grid.cells.getHost()[i],
-                                   grid.cells.getDevice()[i],
-                                   grid.cells_size.getHost()[i] * sizeof(Object),
-                                   cudaMemcpyDeviceToHost));
-    }
-
-    return grid;
-}
+};
 
 /* intersect with a cell */
-__device__ bool
+__device__ int
 intersect_with_cell(Object *objs, int size,
-        Ray *ray, float *t, const Object* hitted_object)
+        Ray *ray, float *t, Object* hitted_object)
 {
+
+	if (objs == NULL)
+		return false;
+	int hit_index = -1;
 
     ComputeHit ch;
     for (int i = 0; i < size; i++)
@@ -222,17 +251,21 @@ intersect_with_cell(Object *objs, int size,
         if (ch.isHit() && ch.t() < *t)
         {
             *t = ch.t();
-            hitted_object = objs + i;
+            hit_index = i;
         }
 
     }
 
-    return (hitted_object != NULL);
+    return hit_index;
 }
 
 /* intersect with grid */
-__device__ bool
-intersect_with_grid(Grid *grid, Ray *ray,const  Object *hitted_object, float *tmin)
+__device__ Object *
+intersect_with_grid(
+        Object **cells, int* cells_size,
+        Ray *ray, Object *hitted_object, float *tmin,
+        float x0, float y0, float z0, float x1, float y1, float z1,
+        int nx, int ny, int nz)
 {
     float ox = ray->pos.x;
     float oy = ray->pos.y;
@@ -240,18 +273,6 @@ intersect_with_grid(Grid *grid, Ray *ray,const  Object *hitted_object, float *tm
     float dx = ray->dir.x;
     float dy = ray->dir.y;
     float dz = ray->dir.z;
-
-    /* TODO: shared */
-    float x0 = grid->x0;
-    float y0 = grid->y0;
-    float z0 = grid->z0;
-    float x1 = grid->x1;
-    float y1 = grid->y1;
-    float z1 = grid->z1;
-
-    int nx = grid->nx;
-    int ny = grid->ny;
-    int nz = grid->nz;
 
     float tx_min, ty_min, tz_min;
     float tx_max, ty_max, tz_max;
@@ -306,13 +327,15 @@ intersect_with_grid(Grid *grid, Ray *ray,const  Object *hitted_object, float *tm
         t1 = tz_max;
 
     if (t0 > t1)
-        return(false);
+        return NULL;
 
     /* initial cell coordinates */
     int ix, iy, iz;
 
 
-    if (inside(grid, ray->pos)) {
+    if (ox >= x0 && oy >= y0 && oz >= z0 &&
+        ox <= x1 && oz <= y1 && oz <= z1)
+    {
         ix = clamp((ox - x0) * nx / (x1 - x0), 0, nx - 1);
         iy = clamp((oy - y0) * ny / (y1 - y0), 0, ny - 1);
         iz = clamp((oz - z0) * nz / (z1 - z0), 0, nz - 1);
@@ -385,53 +408,52 @@ intersect_with_grid(Grid *grid, Ray *ray,const  Object *hitted_object, float *tm
         iz_stop = -1;
     }
 
+    int hit_index = -1;
     /* traverse the grid */
-    while (ix < ix_stop || iy < iy_stop || iz < iz_stop) {
+    while (true) {
 
         int index = ix + nx * iy + nx * ny * iz;
-        Object *cell = grid->cells.getDevice()[index];
-        int size = grid->cells_size.getDevice()[index];
+        Object *cell = cells[index];
+        int size = cells_size[index];
 
         if (tx_next < ty_next && tx_next < tz_next)
         {
-            if (intersect_with_cell(cell, size, ray, tmin, hitted_object))
-            {
-                return true;
-            }
+            hit_index = intersect_with_cell(cell, size, ray, tmin, hitted_object);
+            if (hit_index != -1)
+                return (cell + hit_index);
+
             tx_next += dtx;
             ix += ix_step;
             if (ix == ix_stop)
-                return (false);
+                return NULL;
         }
 
         else
         {
             if (ty_next < tz_next)
             {
-                if (intersect_with_cell(cell, size, ray, tmin, hitted_object))
-                {
-                    return true;
-                }
+                hit_index = intersect_with_cell(cell, size, ray, tmin, hitted_object);
+                if (hit_index != -1)
+                    return (cell + hit_index);
 
                 ty_next += dty;
                 iy += iy_step;
                 if (iy == iy_stop)
-                    return (false);
+                    return NULL;
             }
 
             else
             {
-                if (intersect_with_cell(cell, size, ray, tmin, hitted_object))
-                {
-                    return true;
-                }
+                hit_index = intersect_with_cell(cell, size, ray, tmin, hitted_object);
+                if (hit_index != -1)
+                    return (cell + hit_index);
+
                 tz_next += dtz;
                 iz += iz_step;
                 if (iz == iz_stop)
-                    return (false);
+                    return NULL;
             }
         }
     }
-    return false;
 }
 

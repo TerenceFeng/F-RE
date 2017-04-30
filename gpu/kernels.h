@@ -188,9 +188,104 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
         Normal nr;
         {
             float t = 1e10;
-            /* TODO */
 
-            intersect_with_grid(nullptr, r, obj, &t);
+            ComputeHit ch;
+            for (int n = 0; n < nobj; ++n)
+            {
+                ch.compute(r, object[n].shape);
+                if (ch.isHit() && ch.t() < t)
+                {
+                    t = ch.t();
+                    obj = object + n;
+                }
+            }
+
+            if (obj)
+            {
+                hit = r->pos + Vector::Scale(r->dir, t);
+                int strategy = *(int *)obj->shape;
+                NormalStrategy[strategy](obj->shape, &hit, &nr);
+            }
+        }
+
+        if (obj)
+        {
+            if (obj->bsdf)
+            {
+                ComputeBSDF bsdf = {
+                    nr,
+                    -r->dir,
+                    curand_uniform(&state),
+                    curand_uniform(&state),
+                    {},{},0.0f
+                };
+                _index_node &inode = inode_list[obj->bsdf->pick(curand_uniform(&state))];
+                bsdf.compute(inode);
+                r2->pos = hit;
+                r2->dir = bsdf.wi();
+                r2->factor = bsdf.f();
+                r2->factor.v.mul(r->factor.v);
+                r2->factor.v.scale(bsdf.pdf());
+            }
+            else
+                r2->factor.v.zero();
+
+            if (obj->light)
+            {
+                ComputeLight light = *obj->light;
+                Color cv;
+                light.compute(hit, -r->dir);
+                cv = light.L();
+                cv.v.mul(r->factor.v);
+                (*c).v += cv.v;
+                // stop when hit light
+                r2->factor.v.zero();
+            }
+        }
+    }
+}
+
+/*
+ * input: ray, ray2, color,
+ *        cells, cells_size,
+ *        inode_list, state
+ *        x0, y0, z0, x1, y1, z1
+ *        nx, ny, nz
+ */
+__global__ void trace_ray_in_grid(Ray *ray, Ray *ray2, Color *color,
+                                  Object **cells, int *cells_size,
+                                  _index_node *inode_list, curandState *_state,
+                                  const int x0, const int y0, const int z0,
+                                  const int x1, const int y1, const int z1,
+                                  const int nx, const int ny, const int nz)
+{
+    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = y * w + x;
+
+    curandState &state = _state[i];
+    Ray *r = ray2 + i;
+    Ray *r2 = ray + i, *rtmp;
+    Color *c = color + i;
+    c->v.zero();
+
+    for (int depth = 0; depth < 10; ++depth)
+    {
+        rtmp = r; r = r2; r2 = rtmp;
+        if (r->factor.v.isZero())
+            break;
+
+        Object *obj = nullptr;
+        Point hit;
+        Normal nr;
+        {
+            float t = 1e10;
+
+            obj = intersect_with_grid(cells, cells_size,
+                                r, nullptr, &t,
+                                x0, y0, z0, x1, y1, z1,
+                                nx, ny, nz);
 
             if (obj)
             {

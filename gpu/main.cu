@@ -12,11 +12,13 @@ typedef Vec3<float> Point;
 typedef Vec3<float> Normal;
 
 // ------- Renderer -------
-#define USE_OPENGL
+/* #define USE_OPENGL */
 
 #ifdef USE_OPENGL
 #include "display.h"
 #endif
+
+#include "grid.h"
 
 class Render
 {
@@ -38,12 +40,22 @@ public:
         sample = samp;
         s = samp;
 
+        /* setup space division */
+        /* grid = Grid(obj); */
+
         const int edge = 8;
         dim3 blockD(edge, edge);
         dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
 
         init_rand <<<gridD, blockD>>> (state.getDevice());
     }
+
+    void init_grid()
+    {
+		Grid temp = Grid(obj);
+		grid.swap(temp);
+    }
+
     bool update(unsigned char *data)
     {
         if (s == 0) return false;
@@ -54,9 +66,9 @@ public:
         dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
 
         init_ray <<<gridD, blockD>>> (ray0.getDevice(), cam.getDevice(), state.getDevice());
-        //ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
-        //ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
-        //							  obj.getDevice(), obj.getSize());
+        /* ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice()); */
+        // ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
+        //                               obj.getDevice(), obj.getSize());
         //ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(), color.getDevice(),
         //                               obj.getDevice(), obj.getSize()
         //                               bsdf, state.getDevice());
@@ -64,7 +76,17 @@ public:
         trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
                                        obj.getDevice(), obj.getSize(),
                                        inode_list, state.getDevice());
-        scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 50.0f / (float)sample);
+
+        /*
+         * trace_ray_in_grid <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
+         *                                        grid.cells.getDevice(), grid.cells_size.getDevice(),
+         *                                        inode_list, state.getDevice(),
+         *                                        grid.x0, grid.y0, grid.z0,
+         *                                        grid.x1, grid.y1, grid.z1,
+         *                                        grid.nx, grid.ny, grid.nz);
+         */
+
+        scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 1.0f / (float)sample);
 
         color.copyFromDevice();
 #ifdef USE_OPENGL
@@ -75,12 +97,12 @@ public:
         //	data[i * 3 + 2] = clamp((color.getHost()[i].b)) * 255;
         //}
 
-        for (size_t i = 0; i < color.getSize(); ++i)
-        {
-            data[i * 3] = pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5;
-            data[i * 3 + 1] = pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5;
-            data[i * 3 + 2] = pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5;
-        }
+        //for (size_t i = 0; i < color.getSize(); ++i)
+        //{
+            //data[i * 3] = pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5;
+            //data[i * 3 + 1] = pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5;
+            //data[i * 3 + 2] = pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5;
+        //}
 
         //for (size_t i = 0; i < color.getSize(); ++i)
         //{
@@ -116,7 +138,7 @@ public:
     const char * getInfo()
     {
         static char info[256];
-        sprintf_s(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f)",
+        sprintf(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f)",
                   sample - s,
                   cam.getHost()->pos.x, cam.getHost()->pos.y, cam.getHost()->pos.z,
                   cam.getHost()->fov_h, cam.getHost()->fov_v);
@@ -174,6 +196,11 @@ public:
     }
     void display(const char *filename)
     {
+        for (size_t i = 0; i < color.getSize(); ++i)
+        {
+            color.getHost()[i] = clamp(color.getHost()[i]);
+        }
+
         int h = H, w = W;
         Color *c = color.getHost();
         FILE *f;
@@ -182,8 +209,12 @@ public:
         for (size_t i = 0; i < w * h; ++i)
         {
             size_t p = (i % w) + w * (h - 1 - i / w);
+            /* Color clamped_c = clamp(c[p]); */
             fprintf(f, "%d %d %d ",
-                (int)(clamp(c[p].r) * 255),
+                    /* (int)(clamped_c.r * 255), */
+                    /* (int)(clamped_c.g * 255), */
+                    /* (int)(clamped_c.b * 255)); */
+                    (int)(clamp(c[p].r) * 255),
                     (int)(clamp(c[p].g) * 255),
                     (int)(clamp(c[p].b) * 255));
         }
@@ -197,6 +228,8 @@ private:
 
     Pool<Object> obj;
     Pool<Camera> cam;
+
+    Grid grid;
 
     _index_node *inode_list;
 
@@ -342,7 +375,7 @@ void SmallPT(Render &render, size_t sample)
 
     Pool<Object> object(10, IN_HOST | IN_DEVICE);
     object.getHost()[0] = {shape.getDevice()    , picker.getDevice() + 0, nullptr};
-    object.getHost()[1] = {shape.getDevice() + 1, picker.getDevice() + 1, nullptr};
+    object.getHost()[1] = {shape.getDevice() + 1, picker.getDevice() + 0, nullptr};
     object.getHost()[2] = {shape.getDevice() + 2, picker.getDevice() + 2, nullptr};
     object.getHost()[3] = {shape.getDevice() + 3, picker.getDevice() + 3, nullptr};
     object.getHost()[4] = {shape.getDevice() + 4, picker.getDevice() + 2, nullptr};
@@ -356,6 +389,21 @@ void SmallPT(Render &render, size_t sample)
 
     object.copyToDevice();
 
+
+    object.getHost()[0] = {shape.getHost()    , picker.getHost() + 0, nullptr};
+    object.getHost()[1] = {shape.getHost() + 1, picker.getHost() + 1, nullptr};
+    object.getHost()[2] = {shape.getHost() + 2, picker.getHost() + 2, nullptr};
+    object.getHost()[3] = {shape.getHost() + 3, picker.getHost() + 3, nullptr};
+    object.getHost()[4] = {shape.getHost() + 4, picker.getHost() + 2, nullptr};
+    object.getHost()[5] = {shape.getHost() + 5, picker.getHost() + 2, nullptr};
+
+    object.getHost()[6] = {shape.getHost() + 6, picker.getHost() + 4, nullptr};
+    object.getHost()[7] = {shape.getHost() + 7, picker.getHost() + 4, nullptr};
+    object.getHost()[9] = {rect.getHost(), picker.getHost() + 1, nullptr};
+
+    object.getHost()[8] = {shape.getHost() + 8, nullptr, light.getHost()};
+
+
     Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
     cam.getHost()[0] = {{50.0f, 52.0f, 169.9f},Vector(0.0f, -0.042612f, -1.0f).norm(), 1.9043f, 2.0213f};
     cam.copyToDevice();
@@ -368,7 +416,10 @@ void SmallPT(Render &render, size_t sample)
 int main(void)
 {
     Render render(640, 480);
-    SmallPT(render, 500);
+    SmallPT(render, 100);
+    render.init_grid();
+
+	printf("MAKR: strat rendering\n");
     while (render.update(nullptr))
     {
         printf("\r%.2f%", render.progress() * 100.0f);
