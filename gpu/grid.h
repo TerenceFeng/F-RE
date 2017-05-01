@@ -1,9 +1,25 @@
 #pragma once
 
-#include <vector>
-#include "struct.h"
+// #include <vector>
+// #include "struct.h"
 #include "mem.h"
 
+struct BBox
+{
+    float x0 = 1e10, y0 = 1e10, z0 = 1e10,
+          x1 = -1e10, y1 = -1e10, z1 = -1e10;
+    __device__ __host__ BBox() {}
+    __device__ __host__ BBox (float x0_, float y0_, float z0_,
+                              float x1_, float y1_, float z1_):
+        x0(x0_), y0(y0_), z0(z0_),
+        x1(x1_), y1(y1_), z1(z1_)
+    {}
+};
+
+__device__ __host__ float clamp(const float d, const float min, const float max)
+{
+    return d > max ? max : (d < min ? min : d);
+}
 
 __device__ __host__ BBox
 get_bounded_box(const Object& obj)
@@ -43,7 +59,8 @@ get_bounded_box(const Object& obj)
 class Grid
 {
 public:
-    Pool<Object *> cells;
+    // Pool<Object *> cells;
+    Pool<VectorPool<Object>> cells;
     Pool<int> cells_size;
 	float x0 = 1e10, y0 = 1e10, z0 = 1e10,
 		  x1 = -1e10, y1 = -1e10, z1 = -1e10;
@@ -96,11 +113,11 @@ public:
 
         /* construct cells and cells_size */
 
-        cells = Pool<Object *>(num_cells, IN_HOST | IN_DEVICE);
+        cells = Pool<VectorPool<Object>>(num_cells, IN_HOST | IN_DEVICE);
         cells_size = Pool<int>(num_cells, IN_HOST | IN_DEVICE);
 
 
-        std::vector<std::vector<Object>> _cells(num_cells, std::vector<Object>());
+        // std::vector<std::vector<Object>> _cells(num_cells, std::vector<Object>());
         int index;
 
         for (int i = 0; i < num_objects; i++)
@@ -117,24 +134,23 @@ public:
                     for (int ix = ixmin; ix <= ixmax; ix++)
                     {
                         index = ix + nx * iy + nx * nx * iz;
-                        _cells[index].push_back(objs.getHost()[i]);
+                        cells.getHost()[index].add(objs.getHost()[i]);
+                        // _cells[index].push_back(objs.getHost()[i]);
                     }
         }
 
 
         for (int i = 0; i < num_cells; i++)
         {
-            cells_size.getHost()[i] = _cells[i].size();
+            // cells_size.getHost()[i] = _cells[i].size();
 
+            cells_size.getHost()[i] = cells.getHost()[i].getSize();
             printf("%d %d ", i, cells_size.getHost()[i]);
+            cells.getHost()[i].syncToDevice();
 
-            // Object *cell_ptr = (Object *)malloc(_cells[i].size() * sizeof(Object));
-            // std::copy(_cells[i].begin(), _cells[i].end(), cell_ptr);
+            // CheckCUDAError(cudaMalloc((void **)&cells.getHost()[i], _cells[i].size() * sizeof(Object)));
+            // CheckCUDAError(cudaMemcpy(cells.getHost()[i], &_cells[i][0], _cells[i].size() * sizeof(Object), cudaMemcpyHostToDevice));
 
-            CheckCUDAError(cudaMalloc((void **)&cells.getHost()[i], _cells[i].size() * sizeof(Object)));
-            CheckCUDAError(cudaMemcpy(cells.getHost()[i], &_cells[i][0], _cells[i].size() * sizeof(Object), cudaMemcpyHostToDevice));
-
-            // free(cell_ptr);
         }
 
         cells_size.copyToDevice();

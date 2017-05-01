@@ -9,6 +9,7 @@
 #include "common.h"
 #include "struct.h"
 #include "kernels.h"
+#include "grid.h"
 
 #include "mem.h"
 
@@ -132,7 +133,7 @@ public:
     const char * getInfo()
     {
         static char info[256];
-        sprintf_s(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f)",
+        sprintf(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f)",
                   sample - s,
                   cam.getHost()->pos.x, cam.getHost()->pos.y, cam.getHost()->pos.z,
                   cam.getHost()->fov_h, cam.getHost()->fov_v);
