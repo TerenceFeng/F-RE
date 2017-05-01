@@ -40,12 +40,11 @@ public:
         ray0(w * h, IN_DEVICE),
         ray1(w * h, IN_DEVICE),
         state(w * h, IN_DEVICE),
-        scene(nullptr), cam(0), auto_clear(true)
+        scene(nullptr), auto_clear(true)
     {}
-    void init(Scene &_scene, Pool<Camera> &cam, size_t samp)
+    void init(Scene &_scene, size_t samp)
     {
         this->scene = &_scene;
-        this->cam.swap(cam);
         sample = samp;
         s = samp;
 
@@ -65,31 +64,37 @@ public:
         dim3 blockD(edge, edge);
         dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
 
-        init_ray <<<gridD, blockD>>> (ray0.getDevice(), cam.getDevice(), state.getDevice());
-        //ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
-        //ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
-        //							  obj.getDevice(), obj.getSize());
-        //ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(), color.getDevice(),
-        //                               obj.getDevice(), obj.getSize()
-        //                               bsdf, state.getDevice());
-        CheckCUDAError(cudaGetLastError());
+        float px[] = {0.0f, 0.0f, 1.0f, 1.0f};
+        float py[] = {0.0f, 1.0f, 1.0f, 0.0f};
+        for (int corner = 0; corner < 4; ++corner)
+        {
+            init_ray <<<gridD, blockD>>> (ray0.getDevice(),
+                                          scene->camera()->getDevice(),
+                                          state.getDevice(),
+                                          px[corner], py[corner]);
+            CheckCUDAError(cudaGetLastError());
 
-        trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
-                                       scene->object().getDevice(), scene->object().getSize(),
-                                       scene->bsdf().getDevice_bsdf(),
-                                       state.getDevice());
-        CheckCUDAError(cudaGetLastError());
-        scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 50.0f / (float)sample);
-        CheckCUDAError(cudaGetLastError());
+            //ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
+            //ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
+            //                            scene->object().getDevice(), scene->object().getSize());
+            //ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(), color.getDevice(),
+            //                               obj.getDevice(), obj.getSize()
+            //                               bsdf, state.getDevice());
+            //normal_map <<<gridD, blockD>>> (color.getDevice(), ray0.getDevice(),
+            //                                scene->object().getDevice(), scene->object().getSize());
+            //CheckCUDAError(cudaGetLastError());
+
+            trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
+                                           scene->object().getDevice(), scene->object().getSize(),
+                                           scene->bsdf().getDevice_bsdf(),
+                                           state.getDevice());
+            CheckCUDAError(cudaGetLastError());
+            scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 10.0f / (float)sample);
+            CheckCUDAError(cudaGetLastError());
+        }
 
         color.copyFromDevice();
 #ifdef USE_OPENGL
-        //for (size_t i = 0; i < color.getSize(); ++i)
-        //{
-        //	data[i * 3] = clamp((color.getHost()[i].r)) * 255;
-        //	data[i * 3 + 1] = clamp((color.getHost()[i].g)) * 255;
-        //	data[i * 3 + 2] = clamp((color.getHost()[i].b)) * 255;
-        //}
 
         for (size_t i = 0; i < color.getSize(); ++i)
         {
@@ -100,24 +105,47 @@ public:
 
         //for (size_t i = 0; i < color.getSize(); ++i)
         //{
+        //	data[i * 3] = clamp((color.getHost()[i].r)) * 255;
+        //	data[i * 3 + 1] = clamp((color.getHost()[i].g)) * 255;
+        //	data[i * 3 + 2] = clamp((color.getHost()[i].b)) * 255;
+        //}
+
+        //for (size_t i = 0; i < color.getSize(); ++i)
+        //{
         //	Color c = Clamp(color.getHost()[i]);
         //	data[i * 3] = c.r * 255;
         //	data[i * 3 + 1] = c.g * 255;
         //	data[i * 3 + 2] = c.b * 255;
         //}
 
-        //Color maxv = { 0.0f, 0.0f, 0.0f };
+        //Color maxv = {0.0f, 0.0f, 0.0f};
         //for (size_t i = 0; i < color.getSize(); ++i)
         //{
-        //	maxv.r = max(maxv.r, color.getHost()[i].r);
-        //	maxv.g = max(maxv.g, color.getHost()[i].g);
-        //	maxv.b = max(maxv.b, color.getHost()[i].b);
+        //    maxv.r = max(maxv.r, color.getHost()[i].r);
+        //    maxv.g = max(maxv.g, color.getHost()[i].g);
+        //    maxv.b = max(maxv.b, color.getHost()[i].b);
         //}
         //for (size_t i = 0; i < color.getSize(); ++i)
         //{
-        //	data[i * 3] = clamp((/*maxv.r - */color.getHost()[i].r) / maxv.r) * 255;
-        //	data[i * 3 + 1] = clamp((/*maxv.g - */color.getHost()[i].g) / maxv.g) * 255;
-        //	data[i * 3 + 2] = clamp((/*maxv.b - */color.getHost()[i].b) / maxv.b) * 255;
+        //    data[i * 3] = clamp((color.getHost()[i].r) / (maxv.r)) * 255;
+        //    data[i * 3 + 1] = clamp((color.getHost()[i].g) / (maxv.g)) * 255;
+        //    data[i * 3 + 2] = clamp((color.getHost()[i].b) / (maxv.b)) * 255;
+        //}
+
+        //float maxv = 0.0f, minv = 1e10f;
+        //for (size_t i = 0; i < color.getSize(); ++i)
+        //{
+        //    maxv = max(maxv, color.getHost()[i].r);
+        //    if (!color.getHost()[i].v.isZero())
+        //    {
+        //        minv = min(minv, color.getHost()[i].r);
+        //    }
+        //}
+        //for (size_t i = 0; i < color.getSize(); ++i)
+        //{
+        //    data[i * 3] = data[i * 3 + 1] = data[i * 3 + 2] = 0;
+        //    if (!color.getHost()[i].v.isZero())
+        //    data[i * 3] = data[i * 3 + 1] = data[i * 3 + 2] = 255 - clamp((color.getHost()[i].r - minv) / (maxv - minv)) * 255;
         //}
 #endif
         CheckCUDAError(cudaGetLastError());
@@ -131,11 +159,25 @@ public:
     }
     const char * getInfo()
     {
+        Color maxv = {0.0f, 0.0f, 0.0f}, minv = {1e5, 1e5, 1e5};
+        for (size_t i = 0; i < color.getSize(); ++i)
+        {
+            maxv.r = max(maxv.r, color.getHost()[i].r);
+            maxv.g = max(maxv.g, color.getHost()[i].g);
+            maxv.b = max(maxv.b, color.getHost()[i].b);
+            if (!color.getHost()[i].v.isZero())
+            {
+                minv.r = min(minv.r, color.getHost()[i].r);
+                minv.g = min(minv.g, color.getHost()[i].g);
+                minv.b = min(minv.b, color.getHost()[i].b);
+            }
+        }
         static char info[256];
-        sprintf_s(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f)",
+        sprintf_s(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f) min/max(%.2f/%.2f, %.2f/%.2f, %.2f/%.2f)",
                   sample - s,
-                  cam.getHost()->pos.x, cam.getHost()->pos.y, cam.getHost()->pos.z,
-                  cam.getHost()->fov_h, cam.getHost()->fov_v);
+                  scene->camera()->getHost()->pos.x, scene->camera()->getHost()->pos.y, scene->camera()->getHost()->pos.z,
+                  scene->camera()->getHost()->fov_h, scene->camera()->getHost()->fov_v,
+                  minv.x, maxv.x, minv.y, maxv.y, minv.z, maxv.z);
         return info;
     }
     void clearScreen()
@@ -147,32 +189,32 @@ public:
     }
     void changFOV_h(float f)
     {
-        cam.getHost()->fov_h += f;
-        cam.copyToDevice();
+        scene->camera()->getHost()->fov_h += f;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void changFOV_v(float f)
     {
-        cam.getHost()->fov_v += f;
-        cam.copyToDevice();
+        scene->camera()->getHost()->fov_v += f;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void moveX(float v)
     {
-        cam.getHost()->pos.x += v;
-        cam.copyToDevice();
+        scene->camera()->getHost()->pos.x += v;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void moveY(float v)
     {
-        cam.getHost()->pos.y += v;
-        cam.copyToDevice();
+        scene->camera()->getHost()->pos.y += v;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void moveZ(float v)
     {
-        cam.getHost()->pos.z += v;
-        cam.copyToDevice();
+        scene->camera()->getHost()->pos.z += v;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     float ratio()
@@ -212,7 +254,6 @@ private:
     Pool<curandState> state;
 
     Scene *scene;
-    Pool<Camera> cam;
 
     // DEBUG
     size_t sample, s;
@@ -228,8 +269,26 @@ void Scene::load(const char *file)
     while (f.good())
     {
         std::getline(f, line);
-        if (line == "[bsdf]")
+        if (line == "[camera]")
         {
+            LogInfo("Scene: load camera info...");
+            std::getline(f, line);
+            if (!line.empty())
+            {
+                iss = std::istringstream(line);
+                _camera = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
+                Camera &cam = _camera->getHost()[0];
+                iss >> cam.pos
+                    >> cam.dir
+                    >> cam.fov_h
+                    >> cam.fov_v;
+                cam.dir.norm();
+                _camera->copyToDevice();
+            }
+        }
+        else if (line == "[bsdf]")
+        {
+            LogInfo("Scene: load bsdf info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -259,8 +318,9 @@ void Scene::load(const char *file)
                 else break;
             }
         }
-        if (line == "[bsdf-picker]")
+        else if (line == "[bsdf-picker]")
         {
+            LogInfo("Scene: load bsdf-picker info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -278,6 +338,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[shape]")
         {
+            LogInfo("Scene: load shape info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -293,6 +354,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[light]")
         {
+            LogInfo("Scene: load light info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -309,6 +371,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[texture]")
         {
+            LogInfo("Scene: load texture info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -321,6 +384,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[texture-mapping]")
         {
+            LogInfo("Scene: load texture-mapping info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -340,8 +404,7 @@ void Scene::load(const char *file)
                     }
                     else
                     {
-                        PrintError("Scene: bad texture mapping");
-                        exit(1);
+                        ShowErrorAndExit("Scene: bad texture mapping");
                     }
                 }
                 else break;
@@ -349,6 +412,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[object]")
         {
+            LogInfo("Scene: load object info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -370,6 +434,9 @@ void Scene::load(const char *file)
             }
         }
     }
+
+    if (object_factory.getSize() == 0)
+        ShowErrorAndExit("Scene: no object defined.");
 }
 
 #ifndef USE_OPENGL
@@ -378,12 +445,18 @@ int main(void)
 {
     Scene scene;
     scene.load("scene.txt");
-    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
-    cam.getHost()[0] = {{50.0f, 52.0f, 169.9f},Vector(0.0f, -0.042612f, -1.0f).norm(), 1.9043f, 2.0213f};
-    cam.copyToDevice();
+    if (scene.camera() == nullptr)
+    {
+        scene.camera() = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
+        scene.camera()->getHost()[0] = {
+            {50.0f, 52.0f, 169.9f},
+            Vector(0.0f, -0.042612f, -1.0f).norm(),
+            1.9043f, 2.0213f};
+        scene.camera()->copyToDevice();
+    }
 
     Render render(640, 480);
-    render.init(scene, cam, 100);
+    render.init(scene, 100);
     while (render.update(nullptr))
     {
         printf("\r%.2f%", render.progress() * 100.0f);
@@ -402,10 +475,16 @@ static Scene scene;
 void GLInitCallback()
 {
     scene.load("scene.txt");
-    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
-    cam.getHost()[0] = {{50.0f, 52.0f, 169.9f},Vector(0.0f, -0.042612f, -1.0f).norm(), 1.9043f, 2.0213f};
-    cam.copyToDevice();
-    render.init(scene, cam, 500);
+    render.init(scene, 500);
+    if (scene.camera() == nullptr)
+    {
+        scene.camera() = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
+        scene.camera()->getHost()[0] = {
+            {50.0f, 52.0f, 169.9f},
+            Vector(0.0f, -0.042612f, -1.0f).norm(), 
+            1.9043f, 2.0213f};
+        scene.camera()->copyToDevice();
+    }
 }
 const char * GLWindowTitle()
 {
@@ -416,17 +495,19 @@ void GLOnKeyPress(int key)
     switch (key)
     {
         case 0x57: // W
-            render.moveZ(-0.1f); break;
+            render.moveZ(-1.f); break;
         case 0x53: // S
-            render.moveZ(0.1f); break;
+            render.moveZ(1.f); break;
         case 0x41: // A
-            render.moveX(-0.1f); break;
+            render.moveX(-1.f); break;
         case 0x44: // D
-            render.moveX(0.1f); break;
+            render.moveX(1.f); break;
         case 0x45: // E
-            render.changFOV_v(-0.001f); break;
+            render.moveY(1.f); break;
+            //render.changFOV_v(-0.001f); break;
         case 0x51: // Q
-            render.changFOV_v(0.001f); break;
+            render.moveY(-1.f); break;
+            //render.changFOV_v(0.001f); break;
         case 0x5A: // Z
             render.changFOV_h(-0.001f); break;
         case 0x43: // C

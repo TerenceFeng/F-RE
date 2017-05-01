@@ -8,7 +8,7 @@
 
 #include <Windows.h>
 
-void PrintError(const char *s)
+void ShowErrorAndExit(const char *s)
 {
     MessageBox(NULL, s, "SHUTDOWN ERROR", MB_OK | MB_ICONINFORMATION);
 }
@@ -18,7 +18,7 @@ static std::ofstream Logger("log.txt");
 
 #else
 
-void PrintError(const char *s)
+void ShowErrorAndExit(const char *s)
 {
     fprintf(stderr, "%s\n", s);
 }
@@ -45,7 +45,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
     if (code != cudaSuccess)
     {
         sprintf_s(buffer, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-        PrintError(buffer);
+        ShowErrorAndExit(buffer);
         if (abort) exit(code);
     }
 }

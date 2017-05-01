@@ -39,7 +39,6 @@ public:
     }
     void clear()
     {
-        // TODO: uncomment this when Scene is finished
         //if (device_p != nullptr) CheckCUDAError(cudaFree(device_p));
         if (host_p != nullptr) delete[] host_p;
         device_p = host_p = nullptr;
@@ -70,8 +69,7 @@ public:
         }
         if (host_p == nullptr)
         {
-            PrintError("Pool<T>: called getHost(), but IN_HOST not set");
-            exit(1);
+            ShowErrorAndExit("Pool<T>: called getHost(), but IN_HOST not set");
         }
         return host_p;
     }
@@ -84,8 +82,7 @@ public:
         }
         if (device_p == nullptr)
         {
-            PrintError("Pool<T>: called getDevice(), but IN_DEVICE not set");
-            exit(1);
+            ShowErrorAndExit("Pool<T>: called getDevice(), but IN_DEVICE not set");
         }
         return device_p;
     }

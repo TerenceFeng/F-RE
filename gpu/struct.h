@@ -196,14 +196,14 @@ __device__ void Normal_sphere(ShapeEntity *sphere, void *pos, void *normal)
     Sphere &s = *(Sphere *)sphere;
     Point &p = *(Point *)pos;
     Normal &nr = *(Normal *)normal;
-    nr = (p - s.center);// .norm();
+    nr = (p - s.center).norm();
 }
 __device__ void Normal_sphere2(ShapeEntity *sphere, void *pos, void *normal)
 {
     Sphere &s = *(Sphere *)sphere;
     Point &p = *(Point *)pos;
     Normal &nr = *(Normal *)normal;
-    nr = (s.center - p);
+    nr = (s.center - p).norm();
 }
 __device__ void Normal_rectangle(ShapeEntity *rectangle, void *pos, void *normal)
 {
@@ -218,7 +218,7 @@ __device__ void Normal_triangle(ShapeEntity *triangle, void *pos, void *normal)
     Point &p = *(Point *)pos;
     Normal &nr = *(Normal *)normal;
     Vector a = tri.p2 - tri.p1, b = tri.p3 - tri.p1;
-    nr = -Vector::Cross(a, b).norm();
+    nr = Vector::Cross(a, b).norm();
 }
 typedef void(*normal_fun_t)(ShapeEntity *, void *, void *);
 __device__ normal_fun_t NormalStrategy[] = {
@@ -524,7 +524,6 @@ class BSDF_Factory
 public:
     bsdf_handle_t createLambertian(Color R)
     {
-        Logger << "new Lambertian (" << R.r << "," << R.g << "," << R.b << ")\n";
         BSDFEntity model;
         model.diff = {LAMBERTIAN, R};
         models.add(model);
@@ -532,7 +531,6 @@ public:
     }
     bsdf_handle_t createSpecRefl(Color R)
     {
-        Logger << "new SpecularReflection (" << R.r << "," << R.g << "," << R.b << ")\n";
         BSDFEntity model;
         model.refl = {SPEC_REFL, R};
         models.add(model);
@@ -540,7 +538,6 @@ public:
     }
     bsdf_handle_t createSpecTrans(Color T)
     {
-        Logger << "new SpecularTransmission (" << T.r << "," << T.g << "," << T.b << ")\n";
         BSDFEntity model;
         model.trans = {SPEC_REFL, T};
         models.add(model);
@@ -723,6 +720,7 @@ class Scene
     Light_Factory light_factory;
     Texture_Factory texture_factory;
     Object_Factory object_factory;
+    Pool<Camera> *_camera;
 public:
     BSDF_Factory & bsdf()
     {
@@ -743,6 +741,10 @@ public:
     Object_Factory & object()
     {
         return object_factory;
+    }
+    Pool<Camera> * &camera()
+    {
+        return _camera;
     }
 
     void load(const char *file);
