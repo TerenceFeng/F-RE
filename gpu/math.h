@@ -74,6 +74,13 @@ struct Vec3
         z *= v.z;
         return *this;
     }
+    __host__ __device__ inline Vec3<T> &div(const Vec3<T> &v)
+    {
+        x /= v.x;
+        y /= v.y;
+        z /= v.z;
+        return *this;
+    }
     __host__ __device__ inline Vec3<T> &scale(T factor)
     {
         x *= factor;
@@ -84,6 +91,14 @@ struct Vec3
     __host__ __device__ inline T dot(const Vec3<T> &v) const
     {
         return x * v.x + y * v.y + z * v.z;
+    }
+    __host__ __device__ inline T magnitude() const
+    {
+        return sqrt(x * x + y * y + z * z);
+    }
+    __host__ __device__ inline T magnitudeSquared() const
+    {
+        return (x * x + y * y + z * z);
     }
 
     __host__ __device__ inline static Vec3<T> Zero()
@@ -104,6 +119,11 @@ struct Vec3
     __host__ __device__ inline static Vec3<T> Mul(const Vec3<T> &v1, const Vec3<T> &v2)
     {
         Vec3<T> result = {v1.x * v2.x, v1.y * v2.y, v1.z * v2.z};
+        return result;
+    }
+    __host__ __device__ inline static Vec3<T> Div(const Vec3<T> &v1, const Vec3<T> &v2)
+    {
+        Vec3<T> result = {v1.x / v2.x, v1.y / v2.y, v1.z / v2.z};
         return result;
     }
     __host__ __device__ inline static Vec3<T> Scale(const Vec3<T> &v, T factor)
@@ -153,6 +173,11 @@ struct Vec3
     __host__ __device__ Vec3<T>(T _x = 0, T _y = 0, T _z = 0) : x(_x), y(_y), z(_z)
     {}
 };
+typedef Vec3<float> Vertex;
+typedef Vec3<float> Vector;
+typedef Vec3<float> Point;
+typedef Vec3<float> Normal;
+typedef Vec3<float> UVPoint;
 
 /* Geometry */
 template <typename T>
