@@ -8,6 +8,7 @@
 
 #include "common.h"
 #include "struct.h"
+#include "grid.h"
 #include "kernels.h"
 
 #include "mem.h"
@@ -40,13 +41,17 @@ public:
         ray0(w * h, IN_DEVICE),
         ray1(w * h, IN_DEVICE),
         state(w * h, IN_DEVICE),
-        scene(nullptr), auto_clear(true)
+        scene(nullptr), auto_clear(true),
+        grid(nullptr)
     {}
     void init(Scene &_scene, size_t samp)
     {
         this->scene = &_scene;
         sample = samp;
         s = samp;
+
+        /* this->grid = new Grid(scene->object().getHost(), */
+                              /* scene->object().getSize()); */
 
         const int edge = 8;
         dim3 blockD(edge, edge);
@@ -74,22 +79,33 @@ public:
                                           px[corner], py[corner]);
             CheckCUDAError(cudaGetLastError());
 
-            //ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
-            //ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
-            //                            scene->object().getDevice(), scene->object().getSize());
-            //ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(), color.getDevice(),
-            //                               obj.getDevice(), obj.getSize()
-            //                               bsdf, state.getDevice());
+#if 0
+            ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
+#endif
+
+#if 1
+            ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
+                                       scene->object().getDevice(), scene->object().getSize());
+#endif
+            /*
+             * ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(), color.getDevice(),
+             *                               scene->object().getDevice(), scene->object().getSize(),
+             *                               state.getDevice());
+             */
+
             //normal_map <<<gridD, blockD>>> (color.getDevice(), ray0.getDevice(),
             //                                scene->object().getDevice(), scene->object().getSize());
             //CheckCUDAError(cudaGetLastError());
 
+#if 0
             trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
                                            scene->object().getDevice(), scene->object().getSize(),
                                            scene->bsdf().getDevice_bsdf(),
                                            state.getDevice());
+#endif
+
             CheckCUDAError(cudaGetLastError());
-            scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 10.0f / (float)sample);
+            /* scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 10.0f / (float)sample); */
             CheckCUDAError(cudaGetLastError());
         }
 
@@ -173,11 +189,11 @@ public:
             }
         }
         static char info[256];
-        sprintf_s(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f) min/max(%.2f/%.2f, %.2f/%.2f, %.2f/%.2f)",
-                  sample - s,
-                  scene->camera()->getHost()->pos.x, scene->camera()->getHost()->pos.y, scene->camera()->getHost()->pos.z,
-                  scene->camera()->getHost()->fov_h, scene->camera()->getHost()->fov_v,
-                  minv.x, maxv.x, minv.y, maxv.y, minv.z, maxv.z);
+        sprintf(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f) min/max(%.2f/%.2f, %.2f/%.2f, %.2f/%.2f)",
+                sample - s,
+                scene->camera()->getHost()->pos.x, scene->camera()->getHost()->pos.y, scene->camera()->getHost()->pos.z,
+                scene->camera()->getHost()->fov_h, scene->camera()->getHost()->fov_v,
+                minv.x, maxv.x, minv.y, maxv.y, minv.z, maxv.z);
         return info;
     }
     void clearScreen()
@@ -254,6 +270,7 @@ private:
     Pool<curandState> state;
 
     Scene *scene;
+    Grid *grid;
 
     // DEBUG
     size_t sample, s;

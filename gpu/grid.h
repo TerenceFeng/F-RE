@@ -1,6 +1,6 @@
 #pragma once
 
-// #include <vector>
+#include <vector>
 // #include "struct.h"
 #include "mem.h"
 
@@ -60,7 +60,8 @@ class Grid
 {
 public:
     // Pool<Object *> cells;
-    Pool<VectorPool<Object>> cells;
+    // Pool<VectorPool<Object>> _cells;
+	Pool<Object *> cells;
     Pool<int> cells_size;
 	float x0 = 1e10, y0 = 1e10, z0 = 1e10,
 		  x1 = -1e10, y1 = -1e10, z1 = -1e10;
@@ -70,27 +71,66 @@ public:
         cells_size(0)
     {}
 
-	void swap(Grid &&rhs)
-	{
+    Grid(Grid &rhs):
+        cells(rhs.cells),
+        cells_size(rhs.cells_size)
+    {
+		x0 = rhs.x0; y0 = rhs.y0; z0 = rhs.z0;
+		x1 = rhs.x1; y1 = rhs.y1; z1 = rhs.z1;
+		nx = rhs.nx; ny = rhs.ny; nz = rhs.nz;
+    }
+
+    Grid (Grid &&rhs):
+        cells(rhs.cells),
+        cells_size(rhs.cells_size)
+    {
+		x0 = rhs.x0; y0 = rhs.y0; z0 = rhs.z0;
+		x1 = rhs.x1; y1 = rhs.y1; z1 = rhs.z1;
+		nx = rhs.nx; ny = rhs.ny; nz = rhs.nz;
+    }
+
+    Grid &operator = (Grid &rhs)
+    {
 		cells = rhs.cells;
 		cells_size = rhs.cells_size;
 		x0 = rhs.x0; y0 = rhs.y0; z0 = rhs.z0;
 		x1 = rhs.x1; y1 = rhs.y1; z1 = rhs.z1;
 		nx = rhs.nx; ny = rhs.ny; nz = rhs.nz;
-	}
+        return (*this);
+    }
 
-    Grid(Pool<Object>& objs):
+    Grid &operator = (Grid &&rhs)
+    {
+		cells = rhs.cells;
+		cells_size = rhs.cells_size;
+		x0 = rhs.x0; y0 = rhs.y0; z0 = rhs.z0;
+		x1 = rhs.x1; y1 = rhs.y1; z1 = rhs.z1;
+		nx = rhs.nx; ny = rhs.ny; nz = rhs.nz;
+        return (*this);
+    }
+
+	// void swap(Grid &&rhs)
+	// {
+		// cells = rhs.cells;
+		// cells_size = rhs.cells_size;
+		// x0 = rhs.x0; y0 = rhs.y0; z0 = rhs.z0;
+		// x1 = rhs.x1; y1 = rhs.y1; z1 = rhs.z1;
+		// nx = rhs.nx; ny = rhs.ny; nz = rhs.nz;
+   /*  } */
+
+    // Grid(Pool<Object>& objs):
+    Grid(Object *objs, int num_objects):
         cells(0),
         cells_size(0)
     {
         std::vector<BBox> bboxs;
         BBox obj_bbox;
 
-        int num_objects = objs.getSize();
+        // int num_objects = objs.getSize();
 
         for (int i = 0; i < num_objects; i++)
         {
-            obj_bbox = get_bounded_box(objs.getHost()[i]);
+            obj_bbox = get_bounded_box(objs[i]);
             if (obj_bbox.x0 < x0) x0 = obj_bbox.x0;
             if (obj_bbox.y0 < y0) y0 = obj_bbox.y0;
             if (obj_bbox.z0 < z0) z0 = obj_bbox.z0;
@@ -113,11 +153,12 @@ public:
 
         /* construct cells and cells_size */
 
-        cells = Pool<VectorPool<Object>>(num_cells, IN_HOST | IN_DEVICE);
+        // Pool<VectorPool<Object> _cells = Pool<VectorPool<Object>>(num_cells, IN_HOST | IN_DEVICE);
+        cells = Pool<Object *>(num_cells, IN_HOST | IN_DEVICE);
         cells_size = Pool<int>(num_cells, IN_HOST | IN_DEVICE);
 
 
-        // std::vector<std::vector<Object>> _cells(num_cells, std::vector<Object>());
+        std::vector<std::vector<Object>> _cells(num_cells, std::vector<Object>());
         int index;
 
         for (int i = 0; i < num_objects; i++)
@@ -134,22 +175,22 @@ public:
                     for (int ix = ixmin; ix <= ixmax; ix++)
                     {
                         index = ix + nx * iy + nx * nx * iz;
-                        cells.getHost()[index].add(objs.getHost()[i]);
-                        // _cells[index].push_back(objs.getHost()[i]);
+                        _cells[index].push_back(objs[i]);
+                        // _cells.getHost()[index].add(objs[i]);
                     }
         }
 
 
         for (int i = 0; i < num_cells; i++)
         {
-            // cells_size.getHost()[i] = _cells[i].size();
+            cells_size.getHost()[i] = _cells[i].size();
 
-            cells_size.getHost()[i] = cells.getHost()[i].getSize();
+            // cells_size.getHost()[i] = cells.getHost()[i].getSize();
             printf("%d %d ", i, cells_size.getHost()[i]);
-            cells.getHost()[i].syncToDevice();
+            // cells.getHost()[i].syncToDevice();
 
-            // CheckCUDAError(cudaMalloc((void **)&cells.getHost()[i], _cells[i].size() * sizeof(Object)));
-            // CheckCUDAError(cudaMemcpy(cells.getHost()[i], &_cells[i][0], _cells[i].size() * sizeof(Object), cudaMemcpyHostToDevice));
+            CheckCUDAError(cudaMalloc((void **)&cells.getHost()[i], _cells[i].size() * sizeof(Object)));
+            CheckCUDAError(cudaMemcpy(cells.getHost()[i], &_cells[i][0], _cells[i].size() * sizeof(Object), cudaMemcpyHostToDevice));
 
         }
 

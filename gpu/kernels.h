@@ -98,6 +98,7 @@ __global__ void normal_map(Color *color, Ray *ray,
     c->b = fabs(nr.z) + fabs(1.0f - nr.x) + fabs(1.0f - nr.y);
     c->v.norm();
 }
+
 __global__ void ray_depth(Color *color, Ray *ray,
                           const Object *object, const size_t nobj)
 {
@@ -123,6 +124,37 @@ __global__ void ray_depth(Color *color, Ray *ray,
                 obj = object + n;
             }
         }
+        if (obj)
+        {
+            hit = r->pos + Vector::Scale(r->dir, t);
+        }
+    }
+    c->r = c->g = c->b = (t == 1e10f) ? 0.0f : t;
+}
+
+__global__ void ray_depth_in_grid(Color *color, Ray *ray,
+                                  Object **cells, int *cells_size,
+                                  const int x0, const int y0, const int z0,
+                                  const int x1, const int y1, const int z1,
+                                  const int nx, const int ny, const int nz)
+
+{
+    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = y * w + x;
+
+    Ray *r = ray + i;
+    Color *c = color + i;
+
+    const Object *obj = nullptr;
+    Point hit = {0.0f, 0.0f, 0.0f};
+    float t = 1e10f;
+    {
+        obj = intersect_with_grid(cells, cells_size, ray, &t,
+                                  x0, y0, z0, x1, y1, z1,
+                                  nx, ny, nz);
+
         if (obj)
         {
             hit = r->pos + Vector::Scale(r->dir, t);

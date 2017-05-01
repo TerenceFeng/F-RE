@@ -263,8 +263,8 @@ __device__ Color Shader_triangle(ShapeEntity *shape, void *pos, void *normal, Co
     UVPoint mp = Vector(tri.t1).scale(v) + Vector(tri.t2).scale(w) + Vector(tri.t3).scale(u);
     int x = tri.tex->width * mp.x;
     int y = tri.tex->height * mp.y;
-    x = max(0, min(tri.tex->width - 1, x));
-    y = max(0, min(tri.tex->height - 1, y));
+    x = max(0, min((int)tri.tex->width - 1, x));
+    y = max(0, min((int)tri.tex->height - 1, y));
     return Vector::Mul(tri.tex->tex[tri.tex->width * y + x].v, factor->v);
 }
 typedef Color(*shader_fun_t)(ShapeEntity *, void *, void *, Color *);
@@ -669,6 +669,10 @@ public:
     void syncToDevice()
     {
         objects.syncToDevice();
+    }
+    Object * getHost()
+    {
+        return objects.getHost();
     }
     Object * getDevice()
     {
