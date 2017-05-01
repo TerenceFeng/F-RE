@@ -29,16 +29,6 @@ struct Color
     {}
 };
 
-Color clamp(const Color& c)
-{
-    float c_max = -1e10;
-    c_max = max(max(c_max, c.r), max(c.g, c.b));
-    if (c_max > 1.0f)
-        return Color(c.r / c_max, c.g / c_max, c.b / c_max);
-	else
-		return c;
-}
-
 struct Ray
 {
     Vertex pos, dir;
@@ -52,18 +42,6 @@ struct Camera
 };
 
 // ---------------- Shape ----------------
-//
-struct BBox
-{
-    float x0 = 1e10, y0 = 1e10, z0 = 1e10,
-		  x1 = -1e10, y1 = -1e10, z1 = -1e10;
-    __device__ __host__ BBox() {}
-    __device__ __host__ BBox(float x0_, float y0_, float z0_,
-                             float x1_, float y1_, float z1_):
-        x0(x0_), y0(y0_), z0(z0_),
-        x1(x1_), y1(y1_), z1(z1_)
-    {}
-};
 
 typedef void Shape_t;
 
@@ -73,7 +51,6 @@ struct Sphere
     Vertex center;
     float radius;
 };
-
 struct Rectangle
 {
     int strategy;

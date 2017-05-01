@@ -179,9 +179,3 @@ double clamp(double d)
     return d > 1.0 ? 1.0 : (d < 0.0 ? 0.0 : d);
 }
 
-__device__ __host__ float clamp(const float d, const float min, const float max)
-{
-	return d > max ? max : (d < min ? min : d);
-}
-
-
