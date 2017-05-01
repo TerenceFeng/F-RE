@@ -92,6 +92,14 @@ struct Vec3
     {
         return x * v.x + y * v.y + z * v.z;
     }
+    __host__ __device__ inline T magnitude() const
+    {
+        return sqrt(x * x + y * y + z * z);
+    }
+    __host__ __device__ inline T magnitudeSquared() const
+    {
+        return (x * x + y * y + z * z);
+    }
 
     __host__ __device__ inline static Vec3<T> Zero()
     {
@@ -165,6 +173,11 @@ struct Vec3
     __host__ __device__ Vec3<T>(T _x = 0, T _y = 0, T _z = 0) : x(_x), y(_y), z(_z)
     {}
 };
+typedef Vec3<float> Vertex;
+typedef Vec3<float> Vector;
+typedef Vec3<float> Point;
+typedef Vec3<float> Normal;
+typedef Vec3<float> UVPoint;
 
 /* Geometry */
 template <typename T>
