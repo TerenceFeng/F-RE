@@ -89,6 +89,39 @@ __global__ void ray_depth(Color *color, Ray *ray,
     }
     c->r = c->g = c->b = hit.z;
 }
+
+__global__ void ray_depth_in_grid(Color *color, Ray *ray,
+                                  Object **cells, int *cells_size,
+                                  const int x0, const int y0, const int z0,
+                                  const int x1, const int y1, const int z1,
+                                  const int nx, const int ny, const int nz)
+{
+    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = y * w + x;
+
+    Ray *r = ray + i;
+    Color *c = color + i;
+
+    const Object *obj = nullptr;
+    Point hit = {0.0f, 0.0f, 0.0f};
+    {
+        float t = 1e10;
+
+        obj = intersect_with_grid(cells, cells_size,
+                                  r, &t,
+                                  x0, y0, z0, x1, y1, z1,
+                                  nx, ny, nz);
+
+        if (obj)
+        {
+            hit = r->pos + Vector::Scale(r->dir, t);
+        }
+    }
+    c->r = c->g = c->b = hit.z;
+}
+
 __global__ void ray_distance(Ray *ray, Ray *ray2, Color *color,
                              const Object *object, const size_t nobj,
                              _index_node *inode_list, curandState *_state)
@@ -117,7 +150,6 @@ __global__ void ray_distance(Ray *ray, Ray *ray2, Color *color,
         {
             float t = 1e10;
             ComputeHit ch;
-            /* TODO: */
             for (int n = 0; n < nobj; ++n)
             {
                 ch.compute(r, object[n].shape);
@@ -283,7 +315,7 @@ __global__ void trace_ray_in_grid(Ray *ray, Ray *ray2, Color *color,
             float t = 1e10;
 
             obj = intersect_with_grid(cells, cells_size,
-                                r, nullptr, &t,
+                                r, &t,
                                 x0, y0, z0, x1, y1, z1,
                                 nx, ny, nz);
 

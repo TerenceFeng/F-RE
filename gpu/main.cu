@@ -52,8 +52,7 @@ public:
 
     void init_grid()
     {
-		Grid temp = Grid(obj);
-		grid.swap(temp);
+		grid.swap(Grid(obj));
     }
 
     bool update(unsigned char *data)
@@ -66,16 +65,30 @@ public:
         dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
 
         init_ray <<<gridD, blockD>>> (ray0.getDevice(), cam.getDevice(), state.getDevice());
+
         /* ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice()); */
-        // ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
-        //                               obj.getDevice(), obj.getSize());
+
+        /*
+         * ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
+         *                               obj.getDevice(), obj.getSize());
+         */
+
+        ray_depth_in_grid<<<gridD, blockD>>>(color.getDevice(), ray0.getDevice(),
+                                             grid.cells.getDevice(), grid.cells_size.getDevice(),
+                                             grid.x0, grid.y0, grid.z0,
+                                             grid.x1, grid.y1, grid.z1,
+                                             grid.nx, grid.ny, grid.nz);
+
         //ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(), color.getDevice(),
         //                               obj.getDevice(), obj.getSize()
         //                               bsdf, state.getDevice());
 
-        trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
-                                       obj.getDevice(), obj.getSize(),
-                                       inode_list, state.getDevice());
+        /*
+         * trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
+         *                                obj.getDevice(), obj.getSize(),
+         *                                inode_list, state.getDevice());
+         */
+
 
         /*
          * trace_ray_in_grid <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
@@ -196,10 +209,12 @@ public:
     }
     void display(const char *filename)
     {
-        for (size_t i = 0; i < color.getSize(); ++i)
-        {
-            color.getHost()[i] = clamp(color.getHost()[i]);
-        }
+        /*
+         * for (size_t i = 0; i < color.getSize(); ++i)
+         * {
+         *     color.getHost()[i] = clamp(color.getHost()[i]);
+         * }
+         */
 
         int h = H, w = W;
         Color *c = color.getHost();
@@ -209,11 +224,7 @@ public:
         for (size_t i = 0; i < w * h; ++i)
         {
             size_t p = (i % w) + w * (h - 1 - i / w);
-            /* Color clamped_c = clamp(c[p]); */
             fprintf(f, "%d %d %d ",
-                    /* (int)(clamped_c.r * 255), */
-                    /* (int)(clamped_c.g * 255), */
-                    /* (int)(clamped_c.b * 255)); */
                     (int)(clamp(c[p].r) * 255),
                     (int)(clamp(c[p].g) * 255),
                     (int)(clamp(c[p].b) * 255));
