@@ -103,7 +103,7 @@ public:
             //CheckCUDAError(cudaGetLastError());
 
 #if USE_GRID
-            trace_ray_in_grid <<<gridD, blockD>>> (ray1.getDevice(), ray1.getDevice(), c2.getDevice(), scene->bsdf().getDevice_bsdf(), state.getDevice(),
+            trace_ray_in_grid <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(), scene->bsdf().getDevice_bsdf(), state.getDevice(),
                                                   grid->cells.getDevice(), grid->cells_size.getDevice(),
                                                   grid->x0, grid->y0, grid->z0,
                                                   grid->x1, grid->y1, grid->z1,

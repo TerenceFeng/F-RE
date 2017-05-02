@@ -581,19 +581,6 @@ public:
     }
 };
 
-//struct BSDFPicker
-//{
-//    bsdf_handle_t model[3];
-//    float ratio[3];
-//
-//    __device__ size_t pick(float r)
-//    {
-//        if (r <= ratio[0]) return model[0];
-//        if (r <= ratio[1]) return model[1];
-//        return model[2];
-//    }
-//};
-
 // ---------------- Light ----------------
 
 enum LightType
@@ -671,74 +658,40 @@ struct Object
     LightEntity *light;
 };
 
-__device__ __host__ BBox
-get_bounded_box(const Object& obj)
+__device__ __host__ BBox get_bounded_box(void *shape)
 {
-	switch (*(int *)obj.shape)
-	{
+    switch (*(int *)shape)
+    {
         case 0:
-        case 1: {
-                    Sphere &s = *(Sphere *)obj.shape;
+        case 1:
+            {
+                Sphere &s = *(Sphere *)shape;
 
-                    float dist = sqrtf(3 * s.radius * s.radius);
-                    return {s.center.x - dist, s.center.y - dist, s.center.z - dist,
-                            s.center.x + dist, s.center.y + dist, s.center.z + dist};
-                }
-        case 2: {
-                    Rectangle &r = *(Rectangle *)obj.shape;
-                    Point p0 = r.pos;
-                    Point p1 = r.pos + r.a;
-                    Point p2 = r.pos + r.b;
-                    Point p3 = p1 + r.b;
+                float dist = sqrtf(3 * s.radius * s.radius);
+                return{s.center.x - dist, s.center.y - dist, s.center.z - dist,
+                    s.center.x + dist, s.center.y + dist, s.center.z + dist};
+            }
+        case 2:
+            {
+                struct Rectangle &r = *(struct Rectangle *)shape;
+                Point p0 = r.pos;
+                Point p1 = r.pos + r.a;
+                Point p2 = r.pos + r.b;
+                Point p3 = p1 + r.b;
 
-                    return {
-                            fminf(fminf(p0.x, p1.x), fminf(p2.x, p3.x)),
-                            fminf(fminf(p0.y, p1.y), fminf(p2.y, p3.y)),
-                            fminf(fminf(p0.z, p1.z), fminf(p2.z, p3.z)),
-                            fmaxf(fmaxf(p0.x, p1.x), fmaxf(p2.x, p3.x)),
-                            fmaxf(fmaxf(p0.y, p1.y), fmaxf(p2.y, p3.y)),
-                            fmaxf(fmaxf(p0.z, p1.z), fmaxf(p2.z, p3.z))
-                            };
-                }
+                return{
+                    fminf(fminf(p0.x, p1.x), fminf(p2.x, p3.x)),
+                    fminf(fminf(p0.y, p1.y), fminf(p2.y, p3.y)),
+                    fminf(fminf(p0.z, p1.z), fminf(p2.z, p3.z)),
+                    fmaxf(fmaxf(p0.x, p1.x), fmaxf(p2.x, p3.x)),
+                    fmaxf(fmaxf(p0.y, p1.y), fmaxf(p2.y, p3.y)),
+                    fmaxf(fmaxf(p0.z, p1.z), fmaxf(p2.z, p3.z))
+                };
+            }
         default:
-                return BBox();
+            return BBox();
     }
 }
-
-__device__ __host__ BBox
-get_bounded_box(void *shape)
-{
-	switch (*(int *)shape)
-	{
-        case 0:
-        case 1: {
-                    Sphere &s = *(Sphere *)shape;
-
-                    float dist = sqrtf(3 * s.radius * s.radius);
-                    return {s.center.x - dist, s.center.y - dist, s.center.z - dist,
-                            s.center.x + dist, s.center.y + dist, s.center.z + dist};
-                }
-        case 2: {
-                    Rectangle &r = *(Rectangle *)shape;
-                    Point p0 = r.pos;
-                    Point p1 = r.pos + r.a;
-                    Point p2 = r.pos + r.b;
-                    Point p3 = p1 + r.b;
-
-                    return {
-                            fminf(fminf(p0.x, p1.x), fminf(p2.x, p3.x)),
-                            fminf(fminf(p0.y, p1.y), fminf(p2.y, p3.y)),
-                            fminf(fminf(p0.z, p1.z), fminf(p2.z, p3.z)),
-                            fmaxf(fmaxf(p0.x, p1.x), fmaxf(p2.x, p3.x)),
-                            fmaxf(fmaxf(p0.y, p1.y), fmaxf(p2.y, p3.y)),
-                            fmaxf(fmaxf(p0.z, p1.z), fmaxf(p2.z, p3.z))
-                            };
-                }
-        default:
-                return BBox();
-    }
-}
-
 
 class Object_Factory
 {

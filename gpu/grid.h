@@ -111,9 +111,13 @@ public:
         for (int i = 0; i < num_cells; i++)
         {
             cells_size.getHost()[i] = _cells[i].size();
-
-            CheckCUDAError(cudaMalloc((void **)&cells.getHost()[i], _cells[i].size() * sizeof(Object)));
-            CheckCUDAError(cudaMemcpy(cells.getHost()[i], &_cells[i][0], _cells[i].size() * sizeof(Object), cudaMemcpyHostToDevice));
+            if (_cells[i].empty())
+                cells.getHost()[i] = nullptr;
+            else
+            {
+                CheckCUDAError(cudaMalloc((void **)&cells.getHost()[i], _cells[i].size() * sizeof(Object)));
+                CheckCUDAError(cudaMemcpy(cells.getHost()[i], &_cells[i][0], _cells[i].size() * sizeof(Object), cudaMemcpyHostToDevice));
+            }
 
         }
 
@@ -128,33 +132,31 @@ __device__ int
 intersect_with_cell(Object *objs, int size,
         Ray *ray, float *t)
 {
-
-	if (objs == NULL)
-		return false;
-	int hit_index = -1;
-
-    ComputeHit ch;
-    for (int i = 0; i < size; i++)
+    int hit_index = -1;
+    if (objs != nullptr)
     {
-        ch.compute(ray, objs[i].shape);
-        if (ch.isHit() && ch.t() < *t)
+        ComputeHit ch;
+        for (int i = 0; i < size; i++)
         {
-            *t = ch.t();
-            hit_index = i;
+            ch.compute(ray, objs[i].shape);
+            if (ch.isHit() && ch.t() < *t)
+            {
+                *t = ch.t();
+                hit_index = i;
+            }
+
         }
-
     }
-
     return hit_index;
 }
 
 /* intersect with grid */
-__device__ Object *
-intersect_with_grid(
-        Object **cells, int* cells_size,
-        Ray *ray, float *tmin,
-        float x0, float y0, float z0, float x1, float y1, float z1,
-        int nx, int ny, int nz)
+__device__ void
+intersect_with_grid(Object **obj, Object **cells, int* cells_size,
+                    Ray *ray, float *tmin,
+                    float x0, float y0, float z0,
+                    float x1, float y1, float z1,
+                    int nx, int ny, int nz)
 {
     float ox = ray->pos.x;
     float oy = ray->pos.y;
@@ -216,7 +218,10 @@ intersect_with_grid(
         t1 = tz_max;
 
     if (t0 > t1)
-        return NULL;
+    {
+        *obj = nullptr;
+        return;
+    }
 
     /* initial cell coordinates */
     int ix, iy, iz;
@@ -309,12 +314,18 @@ intersect_with_grid(
         {
             hit_index = intersect_with_cell(cell, size, ray, tmin);
             if (hit_index != -1)
-                return (cell + hit_index);
+            {
+                *obj = cell + hit_index;
+                return;
+            }
 
             tx_next += dtx;
             ix += ix_step;
             if (ix == ix_stop)
-                return NULL;
+            {
+                *obj = nullptr;
+                return;
+            }
         }
 
         else
@@ -323,24 +334,36 @@ intersect_with_grid(
             {
                 hit_index = intersect_with_cell(cell, size, ray, tmin);
                 if (hit_index != -1)
-                    return (cell + hit_index);
+                {
+                    *obj = cell + hit_index;
+                    return;
+                }
 
                 ty_next += dty;
                 iy += iy_step;
                 if (iy == iy_stop)
-                    return NULL;
+                {
+                    *obj = nullptr;
+                    return;
+                }
             }
 
             else
             {
                 hit_index = intersect_with_cell(cell, size, ray, tmin);
                 if (hit_index != -1)
-                    return (cell + hit_index);
+                {
+                    *obj = cell + hit_index;
+                    return;
+                }
 
                 tz_next += dtz;
                 iz += iz_step;
                 if (iz == iz_stop)
-                    return NULL;
+                {
+                    *obj = nullptr;
+                    return;
+                }
             }
         }
     }

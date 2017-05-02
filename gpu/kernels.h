@@ -147,13 +147,13 @@ __global__ void ray_depth_in_grid(Color *color, Ray *ray,
     Ray *r = ray + i;
     Color *c = color + i;
 
-    const Object *obj = nullptr;
+    Object *obj = nullptr;
     Point hit = {0.0f, 0.0f, 0.0f};
     float t = 1e10f;
     {
-        obj = intersect_with_grid(cells, cells_size, ray, &t,
-                                  x0, y0, z0, x1, y1, z1,
-                                  nx, ny, nz);
+        intersect_with_grid(&obj, cells, cells_size, ray, &t,
+                            x0, y0, z0, x1, y1, z1,
+                            nx, ny, nz);
 
         if (obj)
         {
@@ -341,13 +341,13 @@ __global__ void trace_ray_in_grid(Ray *ray, Ray *ray2, Color *color, BSDFEntity 
         if (r->factor.v.isZero())
             break;
 
-        const Object *obj = nullptr;
+        Object *obj = nullptr;
         Point hit;
         Normal nr;
         {
             float t = 1e10;
-            obj = intersect_with_grid(cells, cells_size, r, &t,
-                                      x0, y0, z0, x1, y1, z1, nx, ny, nz);
+            intersect_with_grid(&obj, cells, cells_size, r, &t,
+                                x0, y0, z0, x1, y1, z1, nx, ny, nz);
 
             if (obj)
             {
