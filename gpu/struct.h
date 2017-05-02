@@ -10,6 +10,18 @@
 #include <string>
 
 #include <cassert>
+struct BBox
+{
+    float x0 = 1e10, y0 = 1e10, z0 = 1e10,
+          x1 = -1e10, y1 = -1e10, z1 = -1e10;
+    __device__ __host__ BBox() {}
+    __device__ __host__ BBox (float x0_, float y0_, float z0_,
+                              float x1_, float y1_, float z1_):
+        x0(x0_), y0(y0_), z0(z0_),
+        x1(x1_), y1(y1_), z1(z1_)
+    {}
+};
+
 
 struct Color
 {
@@ -658,13 +670,96 @@ struct Object
     bsdf_picker *bsdf;
     LightEntity *light;
 };
+
+__device__ __host__ BBox
+get_bounded_box(const Object& obj)
+{
+	switch (*(int *)obj.shape)
+	{
+        case 0:
+        case 1: {
+                    Sphere &s = *(Sphere *)obj.shape;
+
+                    float dist = sqrtf(3 * s.radius * s.radius);
+                    return {s.center.x - dist, s.center.y - dist, s.center.z - dist,
+                            s.center.x + dist, s.center.y + dist, s.center.z + dist};
+                }
+        case 2: {
+                    Rectangle &r = *(Rectangle *)obj.shape;
+                    Point p0 = r.pos;
+                    Point p1 = r.pos + r.a;
+                    Point p2 = r.pos + r.b;
+                    Point p3 = p1 + r.b;
+
+                    return {
+                            fminf(fminf(p0.x, p1.x), fminf(p2.x, p3.x)),
+                            fminf(fminf(p0.y, p1.y), fminf(p2.y, p3.y)),
+                            fminf(fminf(p0.z, p1.z), fminf(p2.z, p3.z)),
+                            fmaxf(fmaxf(p0.x, p1.x), fmaxf(p2.x, p3.x)),
+                            fmaxf(fmaxf(p0.y, p1.y), fmaxf(p2.y, p3.y)),
+                            fmaxf(fmaxf(p0.z, p1.z), fmaxf(p2.z, p3.z))
+                            };
+                }
+        default:
+                return BBox();
+    }
+}
+
+__device__ __host__ BBox
+get_bounded_box(void *shape)
+{
+	switch (*(int *)shape)
+	{
+        case 0:
+        case 1: {
+                    Sphere &s = *(Sphere *)shape;
+
+                    float dist = sqrtf(3 * s.radius * s.radius);
+                    return {s.center.x - dist, s.center.y - dist, s.center.z - dist,
+                            s.center.x + dist, s.center.y + dist, s.center.z + dist};
+                }
+        case 2: {
+                    Rectangle &r = *(Rectangle *)shape;
+                    Point p0 = r.pos;
+                    Point p1 = r.pos + r.a;
+                    Point p2 = r.pos + r.b;
+                    Point p3 = p1 + r.b;
+
+                    return {
+                            fminf(fminf(p0.x, p1.x), fminf(p2.x, p3.x)),
+                            fminf(fminf(p0.y, p1.y), fminf(p2.y, p3.y)),
+                            fminf(fminf(p0.z, p1.z), fminf(p2.z, p3.z)),
+                            fmaxf(fmaxf(p0.x, p1.x), fmaxf(p2.x, p3.x)),
+                            fmaxf(fmaxf(p0.y, p1.y), fmaxf(p2.y, p3.y)),
+                            fmaxf(fmaxf(p0.z, p1.z), fmaxf(p2.z, p3.z))
+                            };
+                }
+        default:
+                return BBox();
+    }
+}
+
+
 class Object_Factory
 {
     VectorPool<Object> objects;
+    BBox bbox;
+    std::vector<BBox> object_bboxs;
 public:
     void createObject(const Object &o)
     {
         objects.add(o);
+    }
+    void updateBBox(void *shape)
+    {
+        BBox obj_bbox = get_bounded_box(shape);
+        object_bboxs.push_back(obj_bbox);
+        if (obj_bbox.x0 < bbox.x0) bbox.x0 = obj_bbox.x0;
+        if (obj_bbox.y0 < bbox.y0) bbox.y0 = obj_bbox.y0;
+        if (obj_bbox.z0 < bbox.z0) bbox.z0 = obj_bbox.z0;
+        if (obj_bbox.x1 > bbox.x1) bbox.x1 = obj_bbox.x1;
+        if (obj_bbox.y1 > bbox.y1) bbox.y1 = obj_bbox.y1;
+        if (obj_bbox.z1 > bbox.z1) bbox.z1 = obj_bbox.z1;
     }
     void syncToDevice()
     {
@@ -677,6 +772,14 @@ public:
     Object * getDevice()
     {
         return objects.getDevice();
+    }
+    BBox& getBBox()
+    {
+        return bbox;
+    }
+    std::vector<BBox>& getObjectBBoxs()
+    {
+        return object_bboxs;
     }
     size_t getSize() const
     {

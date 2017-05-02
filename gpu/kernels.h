@@ -318,3 +318,81 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
         }
     }
 }
+
+__global__ void trace_ray_in_grid(Ray *ray, Ray *ray2, Color *color, BSDFEntity *bsdf_list, curandState *_state,
+                                  Object **cells, int *cells_size,
+                                  int x0, int y0, int z0, int x1, int y1, int z1,
+                                  int nx, int ny, int nz)
+{
+    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = y * w + x;
+
+    curandState &state = _state[i];
+    Ray *r = ray2 + i;
+    Ray *r2 = ray + i, *rtmp;
+    Color *c = color + i;
+    c->v.zero();
+
+    for (int depth = 0; depth < 10; ++depth)
+    {
+        rtmp = r; r = r2; r2 = rtmp;
+        if (r->factor.v.isZero())
+            break;
+
+        const Object *obj = nullptr;
+        Point hit;
+        Normal nr;
+        {
+            float t = 1e10;
+            obj = intersect_with_grid(cells, cells_size, r, &t,
+                                      x0, y0, z0, x1, y1, z1, nx, ny, nz);
+
+            if (obj)
+            {
+                hit = r->pos + Vector::Scale(r->dir, t);
+                int strategy = *(int *)obj->shape;
+                NormalStrategy[strategy](obj->shape, &hit, &nr);
+            }
+        }
+
+        if (obj)
+        {
+            if (obj->bsdf)
+            {
+                ComputeBSDF bsdf = {
+                    nr,
+                    -r->dir,
+                    curand_uniform(&state), // TODO: this is slow!!!
+                    curand_uniform(&state),
+                    {},{},0.0f
+                };
+                bsdf.compute(bsdf_list + obj->bsdf->pick(curand_uniform(&state)));
+                r2->pos = hit;
+                r2->dir = bsdf.wi();
+                // shader
+                int strategy = *(int *)obj->shape;
+                Color cl = bsdf.f();
+                cl.v.mul(r->factor.v).scale(bsdf.pdf());
+                r2->factor = ShaderStrategy[strategy](obj->shape, &hit, &nr, &cl);
+            }
+            else
+                r2->factor.v.zero();
+
+            if (obj->light)
+            {
+                ComputeLight light = {};
+                light.compute(obj->light);
+                //light.compute(hit, -r->dir);
+
+                Color cv = light.L();
+                cv.v.mul(r->factor.v);
+                (*c).v += cv.v;
+
+                // stop when hit light
+                r2->factor.v.zero();
+            }
+        }
+    }
+}

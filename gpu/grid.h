@@ -1,66 +1,18 @@
 #pragma once
 
 #include <vector>
-// #include "struct.h"
+#include "struct.h"
 #include "mem.h"
-
-struct BBox
-{
-    float x0 = 1e10, y0 = 1e10, z0 = 1e10,
-          x1 = -1e10, y1 = -1e10, z1 = -1e10;
-    __device__ __host__ BBox() {}
-    __device__ __host__ BBox (float x0_, float y0_, float z0_,
-                              float x1_, float y1_, float z1_):
-        x0(x0_), y0(y0_), z0(z0_),
-        x1(x1_), y1(y1_), z1(z1_)
-    {}
-};
 
 __device__ __host__ float clamp(const float d, const float min, const float max)
 {
     return d > max ? max : (d < min ? min : d);
 }
 
-__device__ __host__ BBox
-get_bounded_box(const Object& obj)
-{
-	switch (*(int *)obj.shape)
-	{
-        case 0:
-        case 1: {
-                    Sphere &s = *(Sphere *)obj.shape;
-
-                    float dist = sqrtf(3 * s.radius * s.radius);
-                    return {s.center.x - dist, s.center.y - dist, s.center.z - dist,
-                            s.center.x + dist, s.center.y + dist, s.center.z + dist};
-                }
-        case 2: {
-                    Rectangle &r = *(Rectangle *)obj.shape;
-                    Point p0 = r.pos;
-                    Point p1 = r.pos + r.a;
-                    Point p2 = r.pos + r.b;
-                    Point p3 = p1 + r.b;
-
-                    return {
-                            fminf(fminf(p0.x, p1.x), fminf(p2.x, p3.x)),
-                            fminf(fminf(p0.y, p1.y), fminf(p2.y, p3.y)),
-                            fminf(fminf(p0.z, p1.z), fminf(p2.z, p3.z)),
-                            fmaxf(fmaxf(p0.x, p1.x), fmaxf(p2.x, p3.x)),
-                            fmaxf(fmaxf(p0.y, p1.y), fmaxf(p2.y, p3.y)),
-                            fmaxf(fmaxf(p0.z, p1.z), fmaxf(p2.z, p3.z))
-                            };
-                }
-        default:
-                return BBox();
-    }
-}
-
 
 class Grid
 {
 public:
-    // Pool<Object *> cells;
-    // Pool<VectorPool<Object>> _cells;
 	Pool<Object *> cells;
     Pool<int> cells_size;
 	float x0 = 1e10, y0 = 1e10, z0 = 1e10,
@@ -73,21 +25,19 @@ public:
 
     Grid(Grid &rhs):
         cells(rhs.cells),
-        cells_size(rhs.cells_size)
-    {
-		x0 = rhs.x0; y0 = rhs.y0; z0 = rhs.z0;
-		x1 = rhs.x1; y1 = rhs.y1; z1 = rhs.z1;
-		nx = rhs.nx; ny = rhs.ny; nz = rhs.nz;
-    }
+        cells_size(rhs.cells_size),
+        x0(rhs.x0), y0(rhs.y0), z0(rhs.z0),
+        x1(rhs.x1), y1(rhs.y1), z1(rhs.z1),
+        nx(rhs.nx), ny(rhs.ny), nz(rhs.nz)
+    {}
 
     Grid (Grid &&rhs):
         cells(rhs.cells),
-        cells_size(rhs.cells_size)
-    {
-		x0 = rhs.x0; y0 = rhs.y0; z0 = rhs.z0;
-		x1 = rhs.x1; y1 = rhs.y1; z1 = rhs.z1;
-		nx = rhs.nx; ny = rhs.ny; nz = rhs.nz;
-    }
+        cells_size(rhs.cells_size),
+        x0(rhs.x0), y0(rhs.y0), z0(rhs.z0),
+        x1(rhs.x1), y1(rhs.y1), z1(rhs.z1),
+        nx(rhs.nx), ny(rhs.ny), nz(rhs.nz)
+    {}
 
     Grid &operator = (Grid &rhs)
     {
@@ -109,36 +59,15 @@ public:
         return (*this);
     }
 
-	// void swap(Grid &&rhs)
-	// {
-		// cells = rhs.cells;
-		// cells_size = rhs.cells_size;
-		// x0 = rhs.x0; y0 = rhs.y0; z0 = rhs.z0;
-		// x1 = rhs.x1; y1 = rhs.y1; z1 = rhs.z1;
-		// nx = rhs.nx; ny = rhs.ny; nz = rhs.nz;
-   /*  } */
-
     // Grid(Pool<Object>& objs):
-    Grid(Object *objs, int num_objects):
+    Grid(Object *objs, int num_objects, const BBox bbox, std::vector<BBox>& bboxs):
         cells(0),
-        cells_size(0)
+        cells_size(0),
+        x0(bbox.x0), y0(bbox.y0), z0(bbox.z0),
+        x1(bbox.x1), y1(bbox.y1), z1(bbox.z1)
     {
-        std::vector<BBox> bboxs;
+        // std::vector<BBox> bboxs;
         BBox obj_bbox;
-
-        // int num_objects = objs.getSize();
-
-        for (int i = 0; i < num_objects; i++)
-        {
-            obj_bbox = get_bounded_box(objs[i]);
-            if (obj_bbox.x0 < x0) x0 = obj_bbox.x0;
-            if (obj_bbox.y0 < y0) y0 = obj_bbox.y0;
-            if (obj_bbox.z0 < z0) z0 = obj_bbox.z0;
-            if (obj_bbox.x1 > x1) x1 = obj_bbox.x1;
-            if (obj_bbox.y1 > y1) y1 = obj_bbox.y1;
-            if (obj_bbox.z1 > z1) z1 = obj_bbox.z1;
-            bboxs.push_back(obj_bbox);
-        }
 
         float wx = x1 - x0;
         float wy = y1 - y0;
@@ -153,7 +82,6 @@ public:
 
         /* construct cells and cells_size */
 
-        // Pool<VectorPool<Object> _cells = Pool<VectorPool<Object>>(num_cells, IN_HOST | IN_DEVICE);
         cells = Pool<Object *>(num_cells, IN_HOST | IN_DEVICE);
         cells_size = Pool<int>(num_cells, IN_HOST | IN_DEVICE);
 
@@ -174,9 +102,8 @@ public:
                 for (int iy = iymin; iy <= iymax; iy++)
                     for (int ix = ixmin; ix <= ixmax; ix++)
                     {
-                        index = ix + nx * iy + nx * nx * iz;
+                        index = ix + nx * iy + nx * ny * iz;
                         _cells[index].push_back(objs[i]);
-                        // _cells.getHost()[index].add(objs[i]);
                     }
         }
 
@@ -184,10 +111,6 @@ public:
         for (int i = 0; i < num_cells; i++)
         {
             cells_size.getHost()[i] = _cells[i].size();
-
-            // cells_size.getHost()[i] = cells.getHost()[i].getSize();
-            printf("%d %d ", i, cells_size.getHost()[i]);
-            // cells.getHost()[i].syncToDevice();
 
             CheckCUDAError(cudaMalloc((void **)&cells.getHost()[i], _cells[i].size() * sizeof(Object)));
             CheckCUDAError(cudaMemcpy(cells.getHost()[i], &_cells[i][0], _cells[i].size() * sizeof(Object), cudaMemcpyHostToDevice));

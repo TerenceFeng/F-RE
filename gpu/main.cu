@@ -5,6 +5,7 @@
 //#include <thrust/device_vector.h>
 
 //#define USE_OPENGL
+#define USE_GRID 0
 
 #include "common.h"
 #include "struct.h"
@@ -50,8 +51,12 @@ public:
         sample = samp;
         s = samp;
 
-        /* this->grid = new Grid(scene->object().getHost(), */
-                              /* scene->object().getSize()); */
+#if USE_GRID
+        this->grid = new Grid(scene->object().getHost(),
+                              scene->object().getSize(),
+                              scene->object().getBBox(),
+                              scene->object().getObjectBBoxs());
+#endif
 
         const int edge = 8;
         dim3 blockD(edge, edge);
@@ -83,7 +88,7 @@ public:
             ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
 #endif
 
-#if 1
+#if 0
             ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
                                        scene->object().getDevice(), scene->object().getSize());
 #endif
@@ -97,7 +102,14 @@ public:
             //                                scene->object().getDevice(), scene->object().getSize());
             //CheckCUDAError(cudaGetLastError());
 
-#if 0
+#if USE_GRID
+            trace_ray_in_grid <<<gridD, blockD>>> (ray1.getDevice(), ray1.getDevice(), c2.getDevice(), scene->bsdf().getDevice_bsdf(), state.getDevice(),
+                                                  grid->cells.getDevice(), grid->cells_size.getDevice(),
+                                                  grid->x0, grid->y0, grid->z0,
+                                                  grid->x1, grid->y1, grid->z1,
+                                                  grid->nx, grid->ny, grid->nz);
+#else
+
             trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
                                            scene->object().getDevice(), scene->object().getSize(),
                                            scene->bsdf().getDevice_bsdf(),
@@ -105,7 +117,7 @@ public:
 #endif
 
             CheckCUDAError(cudaGetLastError());
-            /* scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 10.0f / (float)sample); */
+            scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 10.0f / (float)sample);
             CheckCUDAError(cudaGetLastError());
         }
 
@@ -194,6 +206,7 @@ public:
                 scene->camera()->getHost()->pos.x, scene->camera()->getHost()->pos.y, scene->camera()->getHost()->pos.z,
                 scene->camera()->getHost()->fov_h, scene->camera()->getHost()->fov_v,
                 minv.x, maxv.x, minv.y, maxv.y, minv.z, maxv.z);
+
         return info;
     }
     void clearScreen()
@@ -445,7 +458,9 @@ void Scene::load(const char *file)
                         picker_id ? bsdf_factory.getDevice_picker(picker_id - 1) : nullptr,
                         light_id ? light_factory.getDevice(light_id - 1) : nullptr
                     };
+                    void *shape_host = shape_id ? shape_factory.getHost(shape_id - 1) : nullptr;
                     object_factory.createObject(o);
+                    object_factory.updateBBox(shape_host);
                 }
                 else break;
             }
@@ -498,7 +513,7 @@ void GLInitCallback()
         scene.camera() = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
         scene.camera()->getHost()[0] = {
             {50.0f, 52.0f, 169.9f},
-            Vector(0.0f, -0.042612f, -1.0f).norm(), 
+            Vector(0.0f, -0.042612f, -1.0f).norm(),
             1.9043f, 2.0213f};
         scene.camera()->copyToDevice();
     }
