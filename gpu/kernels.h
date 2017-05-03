@@ -14,7 +14,7 @@
 
 __global__ void init_rand(curandState *state)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -39,7 +39,7 @@ __global__ void init_ray(Ray *ray, const Camera *camera, curandState *_state, fl
 }
 __global__ void ray2color(Color *color, const Ray *ray)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -51,7 +51,7 @@ __global__ void ray2color(Color *color, const Ray *ray)
 
 __global__ void scale_add(Color *color, Color *c2, float f)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -61,7 +61,7 @@ __global__ void scale_add(Color *color, Color *c2, float f)
 __global__ void normal_map(Color *color, Ray *ray,
                           const Object *object, const size_t nobj)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -101,7 +101,7 @@ __global__ void normal_map(Color *color, Ray *ray,
 __global__ void ray_depth(Color *color, Ray *ray,
                           const Object *object, const size_t nobj)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -135,7 +135,7 @@ __global__ void ray_distance(Ray *ray, Ray *ray2, Color *color,
                              BSDFEntity *bsdf_list,
                              curandState *_state)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -207,7 +207,7 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
                           BSDFEntity *bsdf_list,
                           curandState *_state)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -218,7 +218,7 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
     Color *c = color + i;
     c->v.zero();
 
-    for (int depth = 0; depth < 10; ++depth)
+    for (int depth = 0; depth < 5; ++depth)
     {
         rtmp = r; r = r2; r2 = rtmp;
         if (r->factor.v.isZero())

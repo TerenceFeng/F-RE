@@ -4,7 +4,12 @@
 //#include <thrust/host_vector.h>
 //#include <thrust/device_vector.h>
 
-//#define USE_OPENGL
+// Fast Ray-AABB
+// https://tavianator.com/fast-branchless-raybounding-box-intersections/
+// Fast Intersection of all types, static/moving
+// http://www.realtimerendering.com/intersections.html
+
+#define USE_OPENGL
 
 #include "common.h"
 #include "struct.h"
@@ -72,7 +77,7 @@ public:
                                           scene->camera()->getDevice(),
                                           state.getDevice(),
                                           px[corner], py[corner]);
-            CheckCUDAError(cudaGetLastError());
+            CheckCUDAError(cudaDeviceSynchronize());
 
             //ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
             //ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
@@ -88,9 +93,9 @@ public:
                                            scene->object().getDevice(), scene->object().getSize(),
                                            scene->bsdf().getDevice_bsdf(),
                                            state.getDevice());
-            CheckCUDAError(cudaGetLastError());
+            CheckCUDAError(cudaDeviceSynchronize());
             scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 10.0f / (float)sample);
-            CheckCUDAError(cudaGetLastError());
+            CheckCUDAError(cudaDeviceSynchronize());
         }
 
         color.copyFromDevice();
@@ -98,9 +103,9 @@ public:
 
         for (size_t i = 0; i < color.getSize(); ++i)
         {
-            data[i * 3] = pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5;
-            data[i * 3 + 1] = pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5;
-            data[i * 3 + 2] = pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5;
+            data[i * 3] = (char)(pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5);
+            data[i * 3 + 1] = (char)(pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5);
+            data[i * 3 + 2] = (char)(pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5);
         }
 
         //for (size_t i = 0; i < color.getSize(); ++i)
@@ -475,7 +480,7 @@ static Scene scene;
 void GLInitCallback()
 {
     scene.load("scene.txt");
-    render.init(scene, 500);
+    render.init(scene, 100);
     if (scene.camera() == nullptr)
     {
         scene.camera() = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
@@ -525,6 +530,7 @@ bool GLUpdateCallback()
 void GLDoneCallback()
 {
     render.done();
+    DeviceMemoryManager::Summary();
 }
 
 #endif
