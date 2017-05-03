@@ -286,3 +286,97 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
         }
     }
 }
+
+__global__ void super_trace_ray(Color *color, const Camera *camera,
+                                const size_t nobj,
+                                curandState *_state,
+                                float px, float py, float sample)
+{
+    int w = gridDim.x * blockDim.x , h = gridDim.y * blockDim.y;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = y * w + x;
+
+    curandState &state = _state[threadIdx.y * blockDim.x + threadIdx.x];
+    Color c;
+
+    Ray r, rtmp;
+    Ray r2 = {camera->pos, camera->dir,{1.0f, 1.0f, 1.0f}};
+    float half_clip_x = tanf(0.5f * camera->fov_v);
+    float half_clip_y = tanf(0.5f * camera->fov_h);
+    float dx = 1.0f - 2.0f * curand_uniform(&state);
+    float dy = 1.0f - 2.0f * curand_uniform(&state);
+    r2.dir.x += ((float(x) + dx + px) / float(w) - 0.5f) * half_clip_x;
+    r2.dir.y += ((float(y) + dy + py) / float(h) - 0.5f) * half_clip_y;
+    r2.dir.norm();
+
+    c.v.zero();
+    for (int depth = 0; depth < 5; ++depth)
+    {
+        rtmp = r; r = r2; r2 = rtmp;
+        if (r.factor.v.isZero())
+            break;
+
+        const Object *obj = nullptr;
+        Point hit;
+        Normal nr;
+        {
+            float t = 1e10;
+            ComputeHit ch;
+            for (int n = 0; n < nobj; ++n)
+            {
+                ch.compute(&r, const_objects[n].shape);
+                if (ch.isHit() && ch.t() < t)
+                {
+                    t = ch.t();
+                    obj = const_objects + n;
+                }
+            }
+            if (obj)
+            {
+                hit = r.pos + Vector::Scale(r.dir, t);
+                int strategy = *(int *)obj->shape;
+                NormalStrategy[strategy](obj->shape, &hit, &nr);
+            }
+        }
+
+        if (obj)
+        {
+            if (obj->bsdf)
+            {
+                ComputeBSDF bsdf = {
+                    nr,
+                    -r.dir,
+                    curand_uniform(&state), // TODO: this is slow!!!
+                    curand_uniform(&state),
+                    {},{},0.0f
+                };
+                bsdf.compute(const_bsdf + obj->bsdf->pick(curand_uniform(&state)));
+                r2.pos = hit;
+                r2.dir = bsdf.wi();
+                // shader
+                int strategy = *(int *)obj->shape;
+                Color cl = bsdf.f();
+                cl.v.mul(r.factor.v).scale(bsdf.pdf());
+                r2.factor = ShaderStrategy[strategy](obj->shape, &hit, &nr, &cl);
+            }
+            else
+                r2.factor.v.zero();
+
+            if (obj->light)
+            {
+                ComputeLight light = {};
+                light.compute(obj->light);
+                //light.compute(hit, -r.dir);
+
+                Color cv = light.L();
+                cv.v.mul(r.factor.v);
+                c.v += cv.v;
+
+                // stop when hit light
+                r2.factor.v.zero();
+            }
+        }
+    }
+    color[i].v += c.v.scale(10.0f / sample);
+}

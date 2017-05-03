@@ -68,51 +68,51 @@ public:
 std::map<void *, size_t> DeviceMemoryManager::msize;
 std::map<void *, bool> DeviceMemoryManager::mfree;
 
-class ReferenceCounted
-{
-    int *ref;
-public:
-    ReferenceCounted()
-    {
-        ref = new int;
-        *ref = 1;
-    }
-    ReferenceCounted(const ReferenceCounted &r)
-    {
-        ref = r.ref;
-        *ref += 1;
-    }
-    ReferenceCounted(ReferenceCounted &&r)
-    {
-        ref = r.ref;
-        *ref += 1;
-    }
-    ~ReferenceCounted()
-    {
-        if (*ref == 1) free(ref);
-        else *ref -= 1;
-    }
-    int get() const
-    {
-        return *ref;
-    }
-    ReferenceCounted & operator = (const ReferenceCounted &r)
-    {
-        ref = r.ref;
-        *ref += 1;
-        return *this;
-    }
-    ReferenceCounted & operator = (ReferenceCounted &&r)
-    {
-        ref = r.ref;
-        *ref += 1;
-        return *this;
-    }
-};
+//class ReferenceCounted
+//{
+//    int *ref;
+//public:
+//    ReferenceCounted()
+//    {
+//        ref = new int;
+//        *ref = 1;
+//    }
+//    ReferenceCounted(const ReferenceCounted &r)
+//    {
+//        ref = r.ref;
+//        *ref += 1;
+//    }
+//    ReferenceCounted(ReferenceCounted &&r)
+//    {
+//        ref = r.ref;
+//        *ref += 1;
+//    }
+//    ~ReferenceCounted()
+//    {
+//        if (*ref == 1) free(ref);
+//        else *ref -= 1;
+//    }
+//    int get() const
+//    {
+//        return *ref;
+//    }
+//    ReferenceCounted & operator = (const ReferenceCounted &r)
+//    {
+//        ref = r.ref;
+//        *ref += 1;
+//        return *this;
+//    }
+//    ReferenceCounted & operator = (ReferenceCounted &&r)
+//    {
+//        ref = r.ref;
+//        *ref += 1;
+//        return *this;
+//    }
+//};
 
 // TODO: maybe reference counted ? (instead of unique ownership)
 template <typename T>
-class Pool : private ReferenceCounted
+class Pool //: private ReferenceCounted
 {
     size_t size, flag;
     T *host_p, *device_p;
@@ -128,11 +128,11 @@ public:
     {}
     ~Pool()
     {
-        if (get() == 1) clear();
+        /*if (get() == 1)*/ clear();
     }
     void clear()
     {
-        if (device_p != nullptr) DeviceMemoryManager::Free(device_p);
+        //if (device_p != nullptr) DeviceMemoryManager::Free(device_p);
         if (host_p != nullptr) delete[] host_p;
         device_p = host_p = nullptr;
         size = flag = 0;
@@ -185,40 +185,40 @@ public:
     }
 
     // unique ownership
-    //Pool(Pool<T> &o)
-    //{
-    //    size = o.size;
-    //    flag = o.flag;
-    //    host_p = o.host_p;
-    //    device_p = o.device_p;
-    //    o.release();
-    //}
-    //Pool(Pool<T> &&o)
-    //{
-    //    size = o.size;
-    //    flag = o.flag;
-    //    host_p = o.host_p;
-    //    device_p = o.device_p;
-    //    o.release();
-    //}
-    //Pool & operator = (Pool<T> &o)
-    //{
-    //    size = o.size;
-    //    flag = o.flag;
-    //    host_p = o.host_p;
-    //    device_p = o.device_p;
-    //    o.release();
-    //    return *this;
-    //}
-    //Pool & operator = (Pool<T> &&o)
-    //{
-    //    size = o.size;
-    //    flag = o.flag;
-    //    host_p = o.host_p;
-    //    device_p = o.device_p;
-    //    o.release();
-    //    return *this;
-    //}
+    Pool(Pool<T> &o)
+    {
+        size = o.size;
+        flag = o.flag;
+        host_p = o.host_p;
+        device_p = o.device_p;
+        o.release();
+    }
+    Pool(Pool<T> &&o)
+    {
+        size = o.size;
+        flag = o.flag;
+        host_p = o.host_p;
+        device_p = o.device_p;
+        o.release();
+    }
+    Pool & operator = (Pool<T> &o)
+    {
+        size = o.size;
+        flag = o.flag;
+        host_p = o.host_p;
+        device_p = o.device_p;
+        o.release();
+        return *this;
+    }
+    Pool & operator = (Pool<T> &&o)
+    {
+        size = o.size;
+        flag = o.flag;
+        host_p = o.host_p;
+        device_p = o.device_p;
+        o.release();
+        return *this;
+    }
     void swap(Pool<T> &o)
     {
         Pool<T> tmp = *this;
@@ -229,7 +229,7 @@ public:
 
 // store data list-like on CPU, array-like on GPU
 template <typename T>
-class VectorPool : private ReferenceCounted
+class VectorPool //: private ReferenceCounted
 {
     std::vector<T> data;
     T *device_p;
@@ -238,10 +238,10 @@ public:
     {}
     ~VectorPool()
     {
-        if (get() == 1)
-        {
-            if (device_p != nullptr) DeviceMemoryManager::Free(device_p);
-        }
+        //if (get() == 1)
+        //{
+        //    if (device_p != nullptr) DeviceMemoryManager::Free(device_p);
+        //}
         device_p = nullptr;
     }
     void add(const T &i)
@@ -277,4 +277,55 @@ public:
             CheckCUDAError(cudaMemcpy(device_p, data.data(), data.size() * sizeof(T), cudaMemcpyHostToDevice));
         }
     }
+};
+
+template <typename T, size_t N>
+class ConstVectorPool //: private ReferenceCounted
+{
+    std::vector<T> data;
+    T *device_p;
+public:
+    void add(const T &i)
+    {
+        if (data.size() == N)
+        {
+            LogInfo("ConstVectorPool: can't add more elements.");
+        }
+        else
+        {
+            data.emplace_back(i);
+        }
+    }
+    void add(T &&i)
+    {
+        if (data.size() == N)
+        {
+            LogInfo("ConstVectorPool: can't add more elements.");
+        }
+        else
+        {
+            data.emplace_back(i);
+        }
+    }
+    T * getHost()
+    {
+        return data.data();
+    }
+    void setDevice(T *p)
+    {
+        device_p = p;
+        Logger << "ConstMemory: addr: " << device_p << " size: " << (N * sizeof(T)) << "\n";
+    }
+    T * getDevice()
+    {
+        return device_p;
+    }
+    size_t getSize() const
+    {
+        return data.size();
+    }
+    //void syncToDevice()
+    //{
+    //    //CheckCUDAError(cudaMemcpyToSymbol(device_p, data.data(), data.size() * sizeof(T)));
+    //}
 };

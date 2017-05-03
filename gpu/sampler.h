@@ -153,10 +153,10 @@ __device__ inline Vector UniformSampleHemisphere(float u1, float u2)
 //    return{x, y, z};
 //}
 
-//#include <random>
-//float frandom()
-//{
-//    static std::default_random_engine e;
-//    static std::uniform_real_distribution<> dist(0.0, 1.0); // rage 0 - 1
-//    return dist(e);
-//}
+#include <random>
+float frandom()
+{
+    static std::default_random_engine e;
+    static std::uniform_real_distribution<> dist(0.0, 1.0); // rage 0 - 1
+    return dist(e);
+}
