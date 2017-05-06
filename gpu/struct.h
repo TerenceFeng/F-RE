@@ -10,6 +10,18 @@
 #include <string>
 
 #include <cassert>
+struct BBox
+{
+    float x0 = 1e10, y0 = 1e10, z0 = 1e10,
+          x1 = -1e10, y1 = -1e10, z1 = -1e10;
+    __device__ __host__ BBox() {}
+    __device__ __host__ BBox (float x0_, float y0_, float z0_,
+                              float x1_, float y1_, float z1_):
+        x0(x0_), y0(y0_), z0(z0_),
+        x1(x1_), y1(y1_), z1(z1_)
+    {}
+};
+
 
 struct Color
 {
@@ -263,8 +275,8 @@ __device__ Color Shader_triangle(ShapeEntity *shape, void *pos, void *normal, Co
     UVPoint mp = Vector(tri.t1).scale(v) + Vector(tri.t2).scale(w) + Vector(tri.t3).scale(u);
     int x = tri.tex->width * mp.x;
     int y = tri.tex->height * mp.y;
-    x = max(0, min(tri.tex->width - 1, x));
-    y = max(0, min(tri.tex->height - 1, y));
+    x = max(0, min((int)tri.tex->width - 1, x));
+    y = max(0, min((int)tri.tex->height - 1, y));
     return Vector::Mul(tri.tex->tex[tri.tex->width * y + x].v, factor->v);
 }
 typedef Color(*shader_fun_t)(ShapeEntity *, void *, void *, Color *);
@@ -595,19 +607,6 @@ public:
     }
 };
 
-//struct BSDFPicker
-//{
-//    bsdf_handle_t model[3];
-//    float ratio[3];
-//
-//    __device__ size_t pick(float r)
-//    {
-//        if (r <= ratio[0]) return model[0];
-//        if (r <= ratio[1]) return model[1];
-//        return model[2];
-//    }
-//};
-
 // ---------------- Light ----------------
 
 enum LightType
@@ -698,10 +697,46 @@ struct Object
     LightEntity *light;
 };
 
+__device__ __host__ BBox get_bounded_box(void *shape)
+{
+    switch (*(int *)shape)
+    {
+        case 0:
+        case 1:
+            {
+                Sphere &s = *(Sphere *)shape;
+
+                float dist = sqrtf(3 * s.radius * s.radius);
+                return{s.center.x - dist, s.center.y - dist, s.center.z - dist,
+                    s.center.x + dist, s.center.y + dist, s.center.z + dist};
+            }
+        case 2:
+            {
+                struct Rectangle &r = *(struct Rectangle *)shape;
+                Point p0 = r.pos;
+                Point p1 = r.pos + r.a;
+                Point p2 = r.pos + r.b;
+                Point p3 = p1 + r.b;
+
+                return{
+                    fminf(fminf(p0.x, p1.x), fminf(p2.x, p3.x)),
+                    fminf(fminf(p0.y, p1.y), fminf(p2.y, p3.y)),
+                    fminf(fminf(p0.z, p1.z), fminf(p2.z, p3.z)),
+                    fmaxf(fmaxf(p0.x, p1.x), fmaxf(p2.x, p3.x)),
+                    fmaxf(fmaxf(p0.y, p1.y), fmaxf(p2.y, p3.y)),
+                    fmaxf(fmaxf(p0.z, p1.z), fmaxf(p2.z, p3.z))
+                };
+            }
+        default:
+            return BBox();
+    }
+}
+
 __constant__ Object const_objects[500];
 class Object_Factory
 {
     ConstVectorPool<Object, 500> objects;
+
 public:
     Object_Factory()
     {
@@ -713,6 +748,17 @@ public:
     {
         objects.add(o);
     }
+    void updateBBox(void *shape)
+    {
+        BBox obj_bbox = get_bounded_box(shape);
+        object_bboxs.push_back(obj_bbox);
+        if (obj_bbox.x0 < bbox.x0) bbox.x0 = obj_bbox.x0;
+        if (obj_bbox.y0 < bbox.y0) bbox.y0 = obj_bbox.y0;
+        if (obj_bbox.z0 < bbox.z0) bbox.z0 = obj_bbox.z0;
+        if (obj_bbox.x1 > bbox.x1) bbox.x1 = obj_bbox.x1;
+        if (obj_bbox.y1 > bbox.y1) bbox.y1 = obj_bbox.y1;
+        if (obj_bbox.z1 > bbox.z1) bbox.z1 = obj_bbox.z1;
+    }
     void syncToDevice()
     {
         CheckCUDAError(cudaMemcpyToSymbol(const_objects,
@@ -720,9 +766,21 @@ public:
                                           objects.getSize() * sizeof(Object)));
         //objects.syncToDevice();
     }
+    Object * getHost()
+    {
+        return objects.getHost();
+    }
     Object * getDevice()
     {
         return objects.getDevice();
+    }
+    BBox& getBBox()
+    {
+        return bbox;
+    }
+    std::vector<BBox>& getObjectBBoxs()
+    {
+        return object_bboxs;
     }
     size_t getSize() const
     {

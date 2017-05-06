@@ -9,10 +9,12 @@
 // Fast Intersection of all types, static/moving
 // http://www.realtimerendering.com/intersections.html
 
-#define USE_OPENGL
+//#define USE_OPENGL
+#define USE_GRID 0
 
 #include "common.h"
 #include "struct.h"
+#include "grid.h"
 #include "kernels.h"
 
 #include "mem.h"
@@ -45,6 +47,8 @@ public:
         color(w * h, IN_HOST | IN_DEVICE),
         states(BLOCK_SIZE * BLOCK_SIZE, IN_DEVICE),
         scene(nullptr), auto_clear(true)
+
+        grid(nullptr)
     {}
     void init(Scene &_scene, size_t samp)
     {
@@ -54,6 +58,13 @@ public:
 
         dim3 blockD(BLOCK_SIZE, BLOCK_SIZE);
         dim3 gridD(1, 1);
+#if USE_GRID
+        this->grid = new Grid(scene->object().getHost(),
+                              scene->object().getSize(),
+                              scene->object().getBBox(),
+                              scene->object().getObjectBBoxs());
+#endif
+
 
         init_rand <<<gridD, blockD>>> (states.getDevice());
         CheckCUDAError(cudaDeviceSynchronize());
@@ -77,6 +88,7 @@ public:
                  states.getDevice(),
                  px[corner], py[corner], (float)sample);
             CheckCUDAError(cudaDeviceSynchronize());
+
         }
 
 #ifdef USE_OPENGL
@@ -161,11 +173,12 @@ public:
             }
         }
         static char info[256];
-        sprintf_s(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f) min/max(%.2f/%.2f, %.2f/%.2f, %.2f/%.2f)",
-                  sample - s,
-                  scene->camera()->getHost()->pos.x, scene->camera()->getHost()->pos.y, scene->camera()->getHost()->pos.z,
-                  scene->camera()->getHost()->fov_h, scene->camera()->getHost()->fov_v,
-                  minv.x, maxv.x, minv.y, maxv.y, minv.z, maxv.z);
+        sprintf(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f) min/max(%.2f/%.2f, %.2f/%.2f, %.2f/%.2f)",
+                sample - s,
+                scene->camera()->getHost()->pos.x, scene->camera()->getHost()->pos.y, scene->camera()->getHost()->pos.z,
+                scene->camera()->getHost()->fov_h, scene->camera()->getHost()->fov_v,
+                minv.x, maxv.x, minv.y, maxv.y, minv.z, maxv.z);
+
         return info;
     }
     void clearScreen()
@@ -242,6 +255,7 @@ private:
     Pool<curandState> states;
 
     Scene *scene;
+    Grid *grid;
 
     // DEBUG
     size_t sample, s;
@@ -416,7 +430,9 @@ void Scene::load(const char *file)
                         picker_id ? bsdf_factory.getDevice_picker(picker_id - 1) : nullptr,
                         light_id ? light_factory.getDevice(light_id - 1) : nullptr
                     };
+                    void *shape_host = shape_id ? shape_factory.getHost(shape_id - 1) : nullptr;
                     object_factory.createObject(o);
+                    object_factory.updateBBox(shape_host);
                 }
                 else break;
             }
@@ -475,7 +491,7 @@ void GLInitCallback()
         (*g_scene).camera() = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
         (*g_scene).camera()->getHost()[0] = {
             {50.0f, 52.0f, 169.9f},
-            Vector(0.0f, -0.042612f, -1.0f).norm(), 
+            Vector(0.0f, -0.042612f, -1.0f).norm(),
             1.9043f, 2.0213f};
         (*g_scene).camera()->copyToDevice();
     }

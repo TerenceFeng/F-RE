@@ -48,8 +48,13 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
     static char buffer[512];
     if (code != cudaSuccess)
     {
+#ifdef USE_OPENGL
         sprintf_s(buffer, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
         ShowErrorAndExit(buffer);
+        // PrintError(buffer);
+#else
+        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+#endif
         if (abort) exit(code);
     }
 }
