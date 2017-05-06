@@ -14,7 +14,7 @@
 
 __global__ void init_rand(curandState *state)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -39,7 +39,7 @@ __global__ void init_ray(Ray *ray, const Camera *camera, curandState *_state, fl
 }
 __global__ void ray2color(Color *color, const Ray *ray)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -51,7 +51,7 @@ __global__ void ray2color(Color *color, const Ray *ray)
 
 __global__ void scale_add(Color *color, Color *c2, float f)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -61,7 +61,7 @@ __global__ void scale_add(Color *color, Color *c2, float f)
 __global__ void normal_map(Color *color, Ray *ray,
                           const Object *object, const size_t nobj)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -99,75 +99,51 @@ __global__ void normal_map(Color *color, Ray *ray,
     c->v.norm();
 }
 
-__global__ void ray_depth(Color *color, Ray *ray,
-                          const Object *object, const size_t nobj)
+
+__global__ void ray_depth(Color *color, const size_t nobj,
+                          Camera *camera, curandState *_state)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+	int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
 
-    Ray *r = ray + i;
+    curandState &state = _state[threadIdx.y * blockDim.x + threadIdx.x];
+    Ray r = {camera->pos, camera->dir,{1.0f, 1.0f, 1.0f}};
+    float half_clip_x = tanf(0.5f * camera->fov_v);
+    float half_clip_y = tanf(0.5f * camera->fov_h);
+    float dx = 1.0f - 2.0f * curand_uniform(&state);
+    float dy = 1.0f - 2.0f * curand_uniform(&state);
+    r.dir.x += ((float(x) + dx) / float(w) - 0.5f) * half_clip_x;
+    r.dir.y += ((float(y) + dy) / float(h) - 0.5f) * half_clip_y;
+    r.dir.norm();
+
+
     Color *c = color + i;
 
-    const Object *obj = nullptr;
     Point hit = {0.0f, 0.0f, 0.0f};
     float t = 1e10f;
     {
         ComputeHit ch;
         for (int n = 0; n < nobj; ++n)
         {
-            ch.compute(r, object[n].shape);
+            ch.compute(&r, const_objects[n].shape);
             if (ch.isHit() && ch.t() < t)
             {
                 t = ch.t();
-                obj = object + n;
             }
         }
-        if (obj)
-        {
-            hit = r->pos + Vector::Scale(r->dir, t);
-        }
+
     }
     c->r = c->g = c->b = (t == 1e10f) ? 0.0f : t;
 }
 
-__global__ void ray_depth_in_grid(Color *color, Ray *ray,
-                                  Object **cells, int *cells_size,
-                                  const int x0, const int y0, const int z0,
-                                  const int x1, const int y1, const int z1,
-                                  const int nx, const int ny, const int nz)
-
-{
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int i = y * w + x;
-
-    Ray *r = ray + i;
-    Color *c = color + i;
-
-    Object *obj = nullptr;
-    Point hit = {0.0f, 0.0f, 0.0f};
-    float t = 1e10f;
-    {
-        intersect_with_grid(&obj, cells, cells_size, ray, &t,
-                            x0, y0, z0, x1, y1, z1,
-                            nx, ny, nz);
-
-        if (obj)
-        {
-            hit = r->pos + Vector::Scale(r->dir, t);
-        }
-    }
-    c->r = c->g = c->b = (t == 1e10f) ? 0.0f : t;
-}
 __global__ void ray_distance(Ray *ray, Ray *ray2, Color *color,
                              const Object *object, const size_t nobj,
                              BSDFEntity *bsdf_list,
                              curandState *_state)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -239,7 +215,7 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
                           BSDFEntity *bsdf_list,
                           curandState *_state)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x/* , h = gridDim.y * blockDim.y */;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
@@ -250,7 +226,7 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
     Color *c = color + i;
     c->v.zero();
 
-    for (int depth = 0; depth < 10; ++depth)
+    for (int depth = 0; depth < 5; ++depth)
     {
         rtmp = r; r = r2; r2 = rtmp;
         if (r->factor.v.isZero())
@@ -319,39 +295,58 @@ __global__ void trace_ray(Ray *ray, Ray *ray2, Color *color,
     }
 }
 
-__global__ void trace_ray_in_grid(Ray *ray, Ray *ray2, Color *color, BSDFEntity *bsdf_list, curandState *_state,
-                                  Object **cells, int *cells_size,
-                                  int x0, int y0, int z0, int x1, int y1, int z1,
-                                  int nx, int ny, int nz)
+__global__ void super_trace_ray(Color *color, const Camera *camera,
+                                const size_t nobj,
+                                curandState *_state,
+                                float px, float py, float sample)
 {
-    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int w = gridDim.x * blockDim.x , h = gridDim.y * blockDim.y;
+
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int i = y * w + x;
 
-    curandState &state = _state[i];
-    Ray *r = ray2 + i;
-    Ray *r2 = ray + i, *rtmp;
-    Color *c = color + i;
-    c->v.zero();
+    curandState &state = _state[threadIdx.y * blockDim.x + threadIdx.x];
+    Color c;
 
-    for (int depth = 0; depth < 10; ++depth)
+    Ray r, rtmp;
+    Ray r2 = {camera->pos, camera->dir,{1.0f, 1.0f, 1.0f}};
+    float half_clip_x = tanf(0.5f * camera->fov_v);
+    float half_clip_y = tanf(0.5f * camera->fov_h);
+    float dx = 1.0f - 2.0f * curand_uniform(&state);
+    float dy = 1.0f - 2.0f * curand_uniform(&state);
+    r2.dir.x += ((float(x) + dx + px) / float(w) - 0.5f) * half_clip_x;
+    r2.dir.y += ((float(y) + dy + py) / float(h) - 0.5f) * half_clip_y;
+    r2.dir.norm();
+
+    c.v.zero();
+    for (int depth = 0; depth < 5; ++depth)
     {
         rtmp = r; r = r2; r2 = rtmp;
-        if (r->factor.v.isZero())
+        if (r.factor.v.isZero())
             break;
 
-        Object *obj = nullptr;
+        const Object *obj = nullptr;
+
         Point hit;
         Normal nr;
         {
             float t = 1e10;
-            intersect_with_grid(&obj, cells, cells_size, r, &t,
-                                x0, y0, z0, x1, y1, z1, nx, ny, nz);
 
+            ComputeHit ch;
+            for (int n = 0; n < nobj; ++n)
+            {
+                ch.compute(&r, const_objects[n].shape);
+                if (ch.isHit() && ch.t() < t)
+                {
+                    t = ch.t();
+                    obj = const_objects + n;
+                }
+            }
             if (obj)
             {
-                hit = r->pos + Vector::Scale(r->dir, t);
+                hit = r.pos + Vector::Scale(r.dir, t);
+
                 int strategy = *(int *)obj->shape;
                 NormalStrategy[strategy](obj->shape, &hit, &nr);
             }
@@ -363,36 +358,135 @@ __global__ void trace_ray_in_grid(Ray *ray, Ray *ray2, Color *color, BSDFEntity 
             {
                 ComputeBSDF bsdf = {
                     nr,
-                    -r->dir,
+                    -r.dir,
+
                     curand_uniform(&state), // TODO: this is slow!!!
                     curand_uniform(&state),
                     {},{},0.0f
                 };
-                bsdf.compute(bsdf_list + obj->bsdf->pick(curand_uniform(&state)));
-                r2->pos = hit;
-                r2->dir = bsdf.wi();
+                bsdf.compute(const_bsdf + obj->bsdf->pick(curand_uniform(&state)));
+                r2.pos = hit;
+                r2.dir = bsdf.wi();
                 // shader
                 int strategy = *(int *)obj->shape;
                 Color cl = bsdf.f();
-                cl.v.mul(r->factor.v).scale(bsdf.pdf());
-                r2->factor = ShaderStrategy[strategy](obj->shape, &hit, &nr, &cl);
+                cl.v.mul(r.factor.v).scale(bsdf.pdf());
+                r2.factor = ShaderStrategy[strategy](obj->shape, &hit, &nr, &cl);
             }
             else
-                r2->factor.v.zero();
+                r2.factor.v.zero();
+
 
             if (obj->light)
             {
                 ComputeLight light = {};
                 light.compute(obj->light);
-                //light.compute(hit, -r->dir);
+                //light.compute(hit, -r.dir);
 
                 Color cv = light.L();
-                cv.v.mul(r->factor.v);
-                (*c).v += cv.v;
+                cv.v.mul(r.factor.v);
+                c.v += cv.v;
 
                 // stop when hit light
-                r2->factor.v.zero();
+                r2.factor.v.zero();
             }
         }
     }
+    color[i].v += c.v.scale(10.0f / sample);
+
 }
+
+__global__ void trace_ray_grid(Color *color, const Camera *camera,
+                               Object **cells, int *cells_size,
+                               curandState *_state, float px, float py, float sample,
+                               const int x0, const int y0, const int z0,
+                               const int x1, const int y1, const int z1,
+                               const int nx, const int ny, const int nz)
+{
+    int w = gridDim.x * blockDim.x , h = gridDim.y * blockDim.y;
+
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = y * w + x;
+
+    curandState &state = _state[threadIdx.y * blockDim.x + threadIdx.x];
+    Color c;
+
+    Ray r, rtmp;
+    Ray r2 = {camera->pos, camera->dir,{1.0f, 1.0f, 1.0f}};
+    float half_clip_x = tanf(0.5f * camera->fov_v);
+    float half_clip_y = tanf(0.5f * camera->fov_h);
+    float dx = 1.0f - 2.0f * curand_uniform(&state);
+    float dy = 1.0f - 2.0f * curand_uniform(&state);
+    r2.dir.x += ((float(x) + dx + px) / float(w) - 0.5f) * half_clip_x;
+    r2.dir.y += ((float(y) + dy + py) / float(h) - 0.5f) * half_clip_y;
+    r2.dir.norm();
+
+    c.v.zero();
+    for (int depth = 0; depth < 5; ++depth)
+    {
+        rtmp = r; r = r2; r2 = rtmp;
+        if (r.factor.v.isZero())
+            break;
+
+        Point hit;
+        Normal nr;
+        
+
+            float t = 1e10;
+            const Object *obj = intersect_with_grid(cells, cells_size, r, &t,
+                                                    x0, y0, z0, x1, y1, z1, nx, ny, nz);
+
+            if (obj)
+            {
+                hit = r.pos + Vector::Scale(r.dir, t);
+
+                int strategy = *(int *)obj->shape;
+                NormalStrategy[strategy](obj->shape, &hit, &nr);
+            }
+        
+
+        if (obj)
+        {
+            if (obj->bsdf)
+            {
+                ComputeBSDF bsdf = {
+                    nr,
+                    -r.dir,
+
+                    curand_uniform(&state), // TODO: this is slow!!!
+                    curand_uniform(&state),
+                    {},{},0.0f
+                };
+                bsdf.compute(const_bsdf + obj->bsdf->pick(curand_uniform(&state)));
+                r2.pos = hit;
+                r2.dir = bsdf.wi();
+                // shader
+                int strategy = *(int *)obj->shape;
+                Color cl = bsdf.f();
+                cl.v.mul(r.factor.v).scale(bsdf.pdf());
+                r2.factor = ShaderStrategy[strategy](obj->shape, &hit, &nr, &cl);
+            }
+            else
+                r2.factor.v.zero();
+
+
+            if (obj->light)
+            {
+                ComputeLight light = {};
+                light.compute(obj->light);
+                //light.compute(hit, -r.dir);
+
+                Color cv = light.L();
+                cv.v.mul(r.factor.v);
+                c.v += cv.v;
+
+                // stop when hit light
+                r2.factor.v.zero();
+            }
+        }
+    }
+    color[i].v += c.v.scale(10.0f / sample);
+
+}
+

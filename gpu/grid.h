@@ -130,7 +130,7 @@ public:
 /* intersect with a cell */
 __device__ int
 intersect_with_cell(Object *objs, int size,
-        Ray *ray, float *t)
+        Ray ray, float *t)
 {
     int hit_index = -1;
     if (objs != nullptr)
@@ -138,7 +138,7 @@ intersect_with_cell(Object *objs, int size,
         ComputeHit ch;
         for (int i = 0; i < size; i++)
         {
-            ch.compute(ray, objs[i].shape);
+            ch.compute(&ray, objs[i].shape);
             if (ch.isHit() && ch.t() < *t)
             {
                 *t = ch.t();
@@ -151,19 +151,19 @@ intersect_with_cell(Object *objs, int size,
 }
 
 /* intersect with grid */
-__device__ void
-intersect_with_grid(Object **obj, Object **cells, int* cells_size,
-                    Ray *ray, float *tmin,
+__device__ Object *
+intersect_with_grid(Object **cells, int* cells_size,
+                    Ray ray, float *tmin,
                     float x0, float y0, float z0,
                     float x1, float y1, float z1,
                     int nx, int ny, int nz)
 {
-    float ox = ray->pos.x;
-    float oy = ray->pos.y;
-    float oz = ray->pos.z;
-    float dx = ray->dir.x;
-    float dy = ray->dir.y;
-    float dz = ray->dir.z;
+    float ox = ray.pos.x;
+    float oy = ray.pos.y;
+    float oz = ray.pos.z;
+    float dx = ray.dir.x;
+    float dy = ray.dir.y;
+    float dz = ray.dir.z;
 
     float tx_min, ty_min, tz_min;
     float tx_max, ty_max, tz_max;
@@ -219,8 +219,7 @@ intersect_with_grid(Object **obj, Object **cells, int* cells_size,
 
     if (t0 > t1)
     {
-        *obj = nullptr;
-        return;
+        return nullptr;
     }
 
     /* initial cell coordinates */
@@ -235,7 +234,7 @@ intersect_with_grid(Object **obj, Object **cells, int* cells_size,
         iz = clamp((oz - z0) * nz / (z1 - z0), 0, nz - 1);
     }
     else {
-        Point p = ray->pos + Vector::Scale(ray->dir, t0);
+        Point p = ray.pos + Vector::Scale(ray.dir, t0);
         ix = clamp((p.x - x0) * nx / (x1 - x0), 0, nx - 1);
         iy = clamp((p.y - y0) * ny / (y1 - y0), 0, ny - 1);
         iz = clamp((p.z - z0) * nz / (z1 - z0), 0, nz - 1);
@@ -272,11 +271,6 @@ intersect_with_grid(Object **obj, Object **cells, int* cells_size,
         ty_next = ty_min + (iy + 1) * dty;
         iy_step = +1;
         iy_stop = ny;
-    }
-    else {
-        ty_next = ty_min + (ny - iy) * dty;
-        iy_step = -1;
-        iy_stop = -1;
     }
 
     if (dy == 0.0) {
@@ -315,16 +309,14 @@ intersect_with_grid(Object **obj, Object **cells, int* cells_size,
             hit_index = intersect_with_cell(cell, size, ray, tmin);
             if (hit_index != -1)
             {
-                *obj = cell + hit_index;
-                return;
+                return cell + hit_index;
             }
 
             tx_next += dtx;
             ix += ix_step;
             if (ix == ix_stop)
             {
-                *obj = nullptr;
-                return;
+                return nullptr;
             }
         }
 
@@ -335,16 +327,14 @@ intersect_with_grid(Object **obj, Object **cells, int* cells_size,
                 hit_index = intersect_with_cell(cell, size, ray, tmin);
                 if (hit_index != -1)
                 {
-                    *obj = cell + hit_index;
-                    return;
+                    return cell + hit_index;
                 }
 
                 ty_next += dty;
                 iy += iy_step;
                 if (iy == iy_stop)
                 {
-                    *obj = nullptr;
-                    return;
+                    return nullptr;
                 }
             }
 
@@ -353,16 +343,14 @@ intersect_with_grid(Object **obj, Object **cells, int* cells_size,
                 hit_index = intersect_with_cell(cell, size, ray, tmin);
                 if (hit_index != -1)
                 {
-                    *obj = cell + hit_index;
-                    return;
+                    return cell + hit_index;
                 }
 
                 tz_next += dtz;
                 iz += iz_step;
                 if (iz == iz_stop)
                 {
-                    *obj = nullptr;
-                    return;
+                    return nullptr;
                 }
             }
         }
