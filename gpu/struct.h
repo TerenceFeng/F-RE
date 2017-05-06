@@ -772,7 +772,7 @@ class Scene
     Object_Factory object_factory;
     Pool<Camera> *_camera;
 public:
-    Scene() : _camera(nullptr)
+    Scene() : _camera(nullptr), sample_count(500)
     {}
     BSDF_Factory & bsdf()
     {
@@ -798,6 +798,7 @@ public:
     {
         return _camera;
     }
+    int sample_count;
 
     void load(const char *file);
 };

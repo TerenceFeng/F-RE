@@ -49,8 +49,7 @@ public:
     void init(Scene &_scene, size_t samp)
     {
         scene = &_scene;
-        sample = samp;
-        s = samp;
+        s = sample = _scene.sample_count;
 
         dim3 blockD(BLOCK_SIZE, BLOCK_SIZE);
         dim3 gridD(1, 1);
@@ -71,7 +70,12 @@ public:
         float py[] = {0.0f, 1.0f, 1.0f, 0.0f};
         for (int corner = 0; corner < 4; ++corner)
         {
-            super_trace_ray <<<gridD, blockD >>>
+            //super_trace_ray <<<gridD, blockD >>>
+            //    (color.getDevice(), scene->camera()->getDevice(),
+            //     scene->object().getSize(),
+            //     states.getDevice(),
+            //     px[corner], py[corner], (float)sample);
+            super_normal_map <<<gridD, blockD >>>
                 (color.getDevice(), scene->camera()->getDevice(),
                  scene->object().getSize(),
                  states.getDevice(),
@@ -83,19 +87,19 @@ public:
         if (s % 10 == 0)
         {
             color.copyFromDevice();
-            for (size_t i = 0; i < color.getSize(); ++i)
-            {
-                data[i * 3] = (char)(pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5);
-                data[i * 3 + 1] = (char)(pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5);
-                data[i * 3 + 2] = (char)(pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5);
-            }
-
             //for (size_t i = 0; i < color.getSize(); ++i)
             //{
-            //	data[i * 3] = clamp((color.getHost()[i].r)) * 255;
-            //	data[i * 3 + 1] = clamp((color.getHost()[i].g)) * 255;
-            //	data[i * 3 + 2] = clamp((color.getHost()[i].b)) * 255;
+            //    data[i * 3] = (char)(pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5);
+            //    data[i * 3 + 1] = (char)(pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5);
+            //    data[i * 3 + 2] = (char)(pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5);
             //}
+
+            for (size_t i = 0; i < color.getSize(); ++i)
+            {
+                data[i * 3] = clamp((color.getHost()[i].r)) * 255;
+                data[i * 3 + 1] = clamp((color.getHost()[i].g)) * 255;
+                data[i * 3 + 2] = clamp((color.getHost()[i].b)) * 255;
+            }
 
             //for (size_t i = 0; i < color.getSize(); ++i)
             //{
@@ -272,6 +276,16 @@ void Scene::load(const char *file)
                     >> cam.fov_v;
                 cam.dir.norm();
                 _camera->copyToDevice();
+            }
+        }
+        else if (line == "[sample]")
+        {
+            LogInfo("Scene: load sample info...");
+            std::getline(f, line);
+            if (!line.empty())
+            {
+                iss = std::istringstream(line);
+                iss >> sample_count;
             }
         }
         else if (line == "[bsdf]")

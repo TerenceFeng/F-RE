@@ -380,3 +380,56 @@ __global__ void super_trace_ray(Color *color, const Camera *camera,
     }
     color[i].v += c.v.scale(10.0f / sample);
 }
+
+__global__ void super_normal_map(Color *color, const Camera *camera,
+                                 const size_t nobj,
+                                 curandState *_state,
+                                 float px, float py, float sample)
+{
+    int w = gridDim.x * blockDim.x, h = gridDim.y * blockDim.y;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = y * w + x;
+
+    curandState &state = _state[threadIdx.y * blockDim.x + threadIdx.x];
+    Color c;
+
+    Ray r = {camera->pos, camera->dir,{1.0f, 1.0f, 1.0f}};
+    float half_clip_x = tanf(0.5f * camera->fov_v);
+    float half_clip_y = tanf(0.5f * camera->fov_h);
+    float dx = 1.0f - 2.0f * curand_uniform(&state);
+    float dy = 1.0f - 2.0f * curand_uniform(&state);
+    r.dir.x += ((float(x) + dx + px) / float(w) - 0.5f) * half_clip_x;
+    r.dir.y += ((float(y) + dy + py) / float(h) - 0.5f) * half_clip_y;
+    r.dir.norm();
+
+    c.v.zero();
+    const Object *obj = nullptr;
+    Point hit;
+    Normal nr;
+    {
+        float t = 1e10;
+        ComputeHit ch;
+        for (int n = 0; n < nobj; ++n)
+        {
+            ch.compute(&r, const_objects[n].shape);
+            if (ch.isHit() && ch.t() < t)
+            {
+                t = ch.t();
+                obj = const_objects + n;
+            }
+        }
+        if (obj)
+        {
+            hit = r.pos + Vector::Scale(r.dir, t);
+            int strategy = *(int *)obj->shape;
+            NormalStrategy[strategy](obj->shape, &hit, &nr);
+        }
+    }
+    nr.add({1.0f, 1.0f, 1.0f}).scale(0.5f);
+    c.r = fabs(nr.x) + fabs(1.0f - nr.y) + fabs(1.0f - nr.z);
+    c.g = fabs(nr.y) + fabs(1.0f - nr.x) + fabs(1.0f - nr.z);
+    c.b = fabs(nr.z) + fabs(1.0f - nr.x) + fabs(1.0f - nr.y);
+    c.v.norm();
+    color[i].v += c.v.scale(0.25f / sample);
+}
