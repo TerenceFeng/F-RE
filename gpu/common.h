@@ -4,8 +4,6 @@
 #include <device_launch_parameters.h>
 #include <cstdio>
 
-#define USE_OPENGL
-
 #ifdef USE_OPENGL
 
 #include <Windows.h>
@@ -13,7 +11,6 @@
 void ShowErrorAndExit(const char *s)
 {
     MessageBox(NULL, s, "SHUTDOWN ERROR", MB_OK | MB_ICONINFORMATION);
-    abort();
 }
 
 #include <fstream>
@@ -24,7 +21,6 @@ static std::ofstream Logger("log.txt");
 void ShowErrorAndExit(const char *s)
 {
     fprintf(stderr, "%s\n", s);
-    abort()
 }
 
 #include <iostream>
