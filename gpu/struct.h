@@ -312,10 +312,17 @@ struct ComputeHit
 
 typedef size_t shape_handle_t;
 
+__constant__ ShapeEntity const_shape[100];
 class Shape_Factory
 {
-    VectorPool<ShapeEntity> shapes;
+    ConstVectorPool<ShapeEntity, 100> shapes;
 public:
+    Shape_Factory()
+    {
+        ShapeEntity *device_p;
+        CheckCUDAError(cudaGetSymbolAddress((void **)&device_p, const_shape));
+        shapes.setDevice(device_p);
+    }
     shape_handle_t createShape(const ShapeEntity &s)
     {
         shapes.add(s);
@@ -354,7 +361,10 @@ public:
     }
     void syncToDevice()
     {
-        shapes.syncToDevice();
+        CheckCUDAError(cudaMemcpyToSymbol(const_shape,
+                                          shapes.getHost(),
+                                          shapes.getSize() * sizeof(ShapeEntity)));
+        //shapes.syncToDevice();
     }
 };
 
@@ -529,11 +539,21 @@ struct ComputeBSDF
 typedef size_t bsdf_handle_t;
 typedef RandomPicker<bsdf_handle_t> bsdf_picker;
 
+__constant__ BSDFEntity const_bsdf[100];
+__constant__ bsdf_picker const_bsdf_picker[100];
 class BSDF_Factory
 {
-    VectorPool<BSDFEntity> models;
-    VectorPool<bsdf_picker> pickers;
+    ConstVectorPool<BSDFEntity, 100> models;
+    ConstVectorPool<bsdf_picker, 100> pickers;
 public:
+    BSDF_Factory()
+    {
+        void *device_p;
+        CheckCUDAError(cudaGetSymbolAddress((void **)&device_p, const_bsdf));
+        models.setDevice((BSDFEntity *)device_p);
+        CheckCUDAError(cudaGetSymbolAddress((void **)&device_p, const_bsdf_picker));
+        pickers.setDevice((bsdf_picker *)device_p);
+    }
     bsdf_handle_t createLambertian(Color R)
     {
         BSDFEntity model;
@@ -566,8 +586,14 @@ public:
     }
     void syncToDevice()
     {
-        models.syncToDevice();
-        pickers.syncToDevice();
+        CheckCUDAError(cudaMemcpyToSymbol(const_bsdf,
+                                          models.getHost(),
+                                          models.getSize() * sizeof(BSDFEntity)));
+        CheckCUDAError(cudaMemcpyToSymbol(const_bsdf_picker,
+                                          pickers.getHost(),
+                                          pickers.getSize() * sizeof(bsdf_picker)));
+        //models.syncToDevice();
+        //pickers.syncToDevice();
     }
     BSDFEntity * getDevice_bsdf(bsdf_handle_t handle = 0u)
     {
@@ -596,6 +622,8 @@ struct PointLight
 union LightEntity
 {
     PointLight pointlight;
+    LightEntity()
+    {}
 };
 
 struct LightParam
@@ -628,19 +656,30 @@ struct ComputeLight
 
 typedef size_t light_handle_t;
 
+__constant__ LightEntity const_light[10];
 class Light_Factory
 {
-    VectorPool<LightEntity> lights;
+    ConstVectorPool<LightEntity, 10> lights;
 public:
+    Light_Factory()
+    {
+        void *device_p;
+        CheckCUDAError(cudaGetSymbolAddress((void **)&device_p, const_light));
+        lights.setDevice((LightEntity *)device_p);
+    }
     light_handle_t createPointLight(Color L)
     {
-        LightEntity l = {LIGHT_POINT, L};
+        LightEntity l;
+        l.pointlight = {LIGHT_POINT, L};
         lights.add(l);
         return lights.getSize();
     }
     void syncToDevice()
     {
-        lights.syncToDevice();
+        CheckCUDAError(cudaMemcpyToSymbol(const_light,
+                                          lights.getHost(),
+                                          lights.getSize() * sizeof(LightEntity)));
+        //lights.syncToDevice();
     }
     LightEntity * getDevice(light_handle_t handle)
     {
@@ -693,12 +732,18 @@ __device__ __host__ BBox get_bounded_box(void *shape)
     }
 }
 
+__constant__ Object const_objects[500];
 class Object_Factory
 {
-    VectorPool<Object> objects;
-    BBox bbox;
-    std::vector<BBox> object_bboxs;
+    ConstVectorPool<Object, 500> objects;
+
 public:
+    Object_Factory()
+    {
+        void *device_p;
+        CheckCUDAError(cudaGetSymbolAddress((void **)&device_p, const_objects));
+        objects.setDevice((Object *)device_p);
+    }
     void createObject(const Object &o)
     {
         objects.add(o);
@@ -716,7 +761,10 @@ public:
     }
     void syncToDevice()
     {
-        objects.syncToDevice();
+        CheckCUDAError(cudaMemcpyToSymbol(const_objects,
+                                          objects.getHost(),
+                                          objects.getSize() * sizeof(Object)));
+        //objects.syncToDevice();
     }
     Object * getHost()
     {
@@ -782,6 +830,8 @@ class Scene
     Object_Factory object_factory;
     Pool<Camera> *_camera;
 public:
+    Scene() : _camera(nullptr)
+    {}
     BSDF_Factory & bsdf()
     {
         return bsdf_factory;
