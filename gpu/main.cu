@@ -4,13 +4,20 @@
 //#include <thrust/host_vector.h>
 //#include <thrust/device_vector.h>
 
+// Fast Ray-AABB
+// https://tavianator.com/fast-branchless-raybounding-box-intersections/
+// Fast Intersection of all types, static/moving
+// http://www.realtimerendering.com/intersections.html
+
+//#define USE_OPENGL
+#define USE_GRID 1
+
 #include "common.h"
 #include "struct.h"
+#include "grid.h"
 #include "kernels.h"
 
 #include "mem.h"
-
-#define USE_OPENGL
 
 #ifdef USE_OPENGL
 #include "display.h"
@@ -30,91 +37,137 @@ Color Clamp(const Color &c)
     return c2;
 }
 
+#define BLOCK_SIZE 8
+
 class Render
 {
 public:
     Render(size_t w, size_t h)
         : W(w), H(h),
         color(w * h, IN_HOST | IN_DEVICE),
-        c2(w * h, IN_DEVICE),
-        ray0(w * h, IN_DEVICE),
-        ray1(w * h, IN_DEVICE),
-        state(w * h, IN_DEVICE),
-        obj(0), cam(0), auto_clear(true)
+        states(BLOCK_SIZE * BLOCK_SIZE, IN_DEVICE),
+        scene(nullptr), auto_clear(true),
+        grid(nullptr)
     {}
-    void init(Pool<Object> &obj, Pool<Camera> &cam, _index_node *inode_list, size_t samp)
+    void init(Scene &_scene, size_t samp)
     {
-        this->obj.swap(obj);
-        this->cam.swap(cam);
-        this->inode_list = inode_list;
+        scene = &_scene;
         sample = samp;
         s = samp;
 
-        const int edge = 8;
-        dim3 blockD(edge, edge);
-        dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
+        dim3 blockD(BLOCK_SIZE, BLOCK_SIZE);
+        dim3 gridD(1, 1);
+#if USE_GRID
+        this->grid = new Grid(scene->object().getHost(),
+                              scene->object().getSize(),
+                              scene->bbox().getBBox(),
+                              scene->bbox().getObjectBBoxs());
+#endif
 
-        init_rand <<<gridD, blockD>>> (state.getDevice());
+
+        init_rand <<<gridD, blockD>>> (states.getDevice());
+        CheckCUDAError(cudaDeviceSynchronize());
     }
     bool update(unsigned char *data)
     {
         if (s == 0) return false;
         --s;
 
-        const int edge = 8;
-        dim3 blockD(edge, edge);
-        dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
+        dim3 blockD(BLOCK_SIZE, BLOCK_SIZE);
+        dim3 gridD((W + BLOCK_SIZE - 1) / BLOCK_SIZE,
+            (H + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
-        init_ray <<<gridD, blockD>>> (ray0.getDevice(), cam.getDevice(), state.getDevice());
-        //ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
-        //ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
-        //							  obj.getDevice(), obj.getSize());
-        //ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(), color.getDevice(),
-        //                               obj.getDevice(), obj.getSize()
-        //                               bsdf, state.getDevice());
-
-        trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
-                                       obj.getDevice(), obj.getSize(),
-                                       inode_list, state.getDevice());
-        scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 50.0f / (float)sample);
-
-        color.copyFromDevice();
-#ifdef USE_OPENGL
-        //for (size_t i = 0; i < color.getSize(); ++i)
-        //{
-        //	data[i * 3] = clamp((color.getHost()[i].r)) * 255;
-        //	data[i * 3 + 1] = clamp((color.getHost()[i].g)) * 255;
-        //	data[i * 3 + 2] = clamp((color.getHost()[i].b)) * 255;
-        //}
-
-        for (size_t i = 0; i < color.getSize(); ++i)
+        float px[] = {0.0f, 0.0f, 1.0f, 1.0f};
+        float py[] = {0.0f, 1.0f, 1.0f, 0.0f};
+        for (int corner = 0; corner < 4; ++corner)
         {
-            data[i * 3] = pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5;
-            data[i * 3 + 1] = pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5;
-            data[i * 3 + 2] = pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5;
+
+#if 0
+            ray_depth<<<gridD, blockD>>>(color.getDevice(), scene->object().getSize(),
+                      scene->camera()->getDevice(), states.getDevice());
+#endif
+
+#if 1
+
+#if USE_GRID
+
+            trace_ray_grid<<<gridD, blockD>>>
+                (color.getDevice(), scene->camera()->getDevice(),
+                 grid->cells.getDevice(), grid->cells_size.getDevice(),
+                 states.getDevice(), px[corner], py[corner], (float)sample,
+                 grid->x0, grid->y0, grid->z0,
+                 grid->x1, grid->y1, grid->z1,
+                 grid->nx, grid->ny, grid->nz);
+
+#else
+            super_trace_ray <<<gridD, blockD >>>
+                (color.getDevice(), scene->camera()->getDevice(),
+                 scene->object().getSize(),
+                 states.getDevice(),
+                 px[corner], py[corner], (float)sample);
+#endif
+
+#endif
+            CheckCUDAError(cudaDeviceSynchronize());
+
         }
 
-        //for (size_t i = 0; i < color.getSize(); ++i)
-        //{
-        //	Color c = Clamp(color.getHost()[i]);
-        //	data[i * 3] = c.r * 255;
-        //	data[i * 3 + 1] = c.g * 255;
-        //	data[i * 3 + 2] = c.b * 255;
-        //}
+#ifdef USE_OPENGL
+        if (s % 10 == 0)
+        {
+            color.copyFromDevice();
+            for (size_t i = 0; i < color.getSize(); ++i)
+            {
+                data[i * 3] = (char)(pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5);
+                data[i * 3 + 1] = (char)(pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5);
+                data[i * 3 + 2] = (char)(pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5);
+            }
 
-        //Color maxv = { 0.0f, 0.0f, 0.0f };
-        //for (size_t i = 0; i < color.getSize(); ++i)
-        //{
-        //	maxv.r = max(maxv.r, color.getHost()[i].r);
-        //	maxv.g = max(maxv.g, color.getHost()[i].g);
-        //	maxv.b = max(maxv.b, color.getHost()[i].b);
-        //}
-        //for (size_t i = 0; i < color.getSize(); ++i)
-        //{
-        //	data[i * 3] = clamp((/*maxv.r - */color.getHost()[i].r) / maxv.r) * 255;
-        //	data[i * 3 + 1] = clamp((/*maxv.g - */color.getHost()[i].g) / maxv.g) * 255;
-        //	data[i * 3 + 2] = clamp((/*maxv.b - */color.getHost()[i].b) / maxv.b) * 255;
-        //}
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //	data[i * 3] = clamp((color.getHost()[i].r)) * 255;
+            //	data[i * 3 + 1] = clamp((color.getHost()[i].g)) * 255;
+            //	data[i * 3 + 2] = clamp((color.getHost()[i].b)) * 255;
+            //}
+
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //	Color c = Clamp(color.getHost()[i]);
+            //	data[i * 3] = c.r * 255;
+            //	data[i * 3 + 1] = c.g * 255;
+            //	data[i * 3 + 2] = c.b * 255;
+            //}
+
+            //Color maxv = {0.0f, 0.0f, 0.0f};
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //    maxv.r = max(maxv.r, color.getHost()[i].r);
+            //    maxv.g = max(maxv.g, color.getHost()[i].g);
+            //    maxv.b = max(maxv.b, color.getHost()[i].b);
+            //}
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //    data[i * 3] = clamp((color.getHost()[i].r) / (maxv.r)) * 255;
+            //    data[i * 3 + 1] = clamp((color.getHost()[i].g) / (maxv.g)) * 255;
+            //    data[i * 3 + 2] = clamp((color.getHost()[i].b) / (maxv.b)) * 255;
+            //}
+
+            //float maxv = 0.0f, minv = 1e10f;
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //    maxv = max(maxv, color.getHost()[i].r);
+            //    if (!color.getHost()[i].v.isZero())
+            //    {
+            //        minv = min(minv, color.getHost()[i].r);
+            //    }
+            //}
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //    data[i * 3] = data[i * 3 + 1] = data[i * 3 + 2] = 0;
+            //    if (!color.getHost()[i].v.isZero())
+            //    data[i * 3] = data[i * 3 + 1] = data[i * 3 + 2] = 255 - clamp((color.getHost()[i].r - minv) / (maxv - minv)) * 255;
+            //}
+        }
 #endif
         CheckCUDAError(cudaGetLastError());
         CheckCUDAError(cudaDeviceSynchronize());
@@ -127,11 +180,26 @@ public:
     }
     const char * getInfo()
     {
+        Color maxv = {0.0f, 0.0f, 0.0f}, minv = {1e5, 1e5, 1e5};
+        for (size_t i = 0; i < color.getSize(); ++i)
+        {
+            maxv.r = max(maxv.r, color.getHost()[i].r);
+            maxv.g = max(maxv.g, color.getHost()[i].g);
+            maxv.b = max(maxv.b, color.getHost()[i].b);
+            if (!color.getHost()[i].v.isZero())
+            {
+                minv.r = min(minv.r, color.getHost()[i].r);
+                minv.g = min(minv.g, color.getHost()[i].g);
+                minv.b = min(minv.b, color.getHost()[i].b);
+            }
+        }
         static char info[256];
-        sprintf_s(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f)",
-                  sample - s,
-                  cam.getHost()->pos.x, cam.getHost()->pos.y, cam.getHost()->pos.z,
-                  cam.getHost()->fov_h, cam.getHost()->fov_v);
+        sprintf(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f) min/max(%.2f/%.2f, %.2f/%.2f, %.2f/%.2f)",
+                sample - s,
+                scene->camera()->getHost()->pos.x, scene->camera()->getHost()->pos.y, scene->camera()->getHost()->pos.z,
+                scene->camera()->getHost()->fov_h, scene->camera()->getHost()->fov_v,
+                minv.x, maxv.x, minv.y, maxv.y, minv.z, maxv.z);
+
         return info;
     }
     void clearScreen()
@@ -143,32 +211,32 @@ public:
     }
     void changFOV_h(float f)
     {
-        cam.getHost()->fov_h += f;
-        cam.copyToDevice();
+        scene->camera()->getHost()->fov_h += f;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void changFOV_v(float f)
     {
-        cam.getHost()->fov_v += f;
-        cam.copyToDevice();
+        scene->camera()->getHost()->fov_v += f;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void moveX(float v)
     {
-        cam.getHost()->pos.x += v;
-        cam.copyToDevice();
+        scene->camera()->getHost()->pos.x += v;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void moveY(float v)
     {
-        cam.getHost()->pos.y += v;
-        cam.copyToDevice();
+        scene->camera()->getHost()->pos.y += v;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void moveZ(float v)
     {
-        cam.getHost()->pos.z += v;
-        cam.copyToDevice();
+        scene->camera()->getHost()->pos.z += v;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     float ratio()
@@ -186,6 +254,7 @@ public:
     }
     void display(const char *filename)
     {
+        color.copyFromDevice();
         int h = H, w = W;
         Color *c = color.getHost();
         FILE *f;
@@ -203,184 +272,221 @@ public:
 
 private:
     size_t W, H;
-    Pool<Color> color, c2;
-    Pool<Ray> ray0, ray1;
-    Pool<curandState> state;
+    Pool<Color> color;
+    Pool<curandState> states;
 
-    Pool<Object> obj;
-    Pool<Camera> cam;
-
-    _index_node *inode_list;
+    Scene *scene;
+    Grid *grid;
 
     // DEBUG
     size_t sample, s;
     bool auto_clear;
 };
 
-//void TwoBall(Render &render, size_t sample)
-//{
-//    //Pool<ComputeBSDF> bsdf(1, IN_HOST | IN_DEVICE);
-//    //bsdf.getHost()[0] = {
-//    //    {},
-//    //    {1.0f, 0.0f, 0.0f},
-//    //    {{1.0f, 1.0f, 1.0f}},
-//    //    {{0.0f, 0.0f, 0.0f}},
-//    //    {{0.0f, 0.0f, 0.0f}}
-//    //};
-//    //bsdf.copyToDevice();
-//    BSDFFactory factory(1);
-//    factory.createLambertian({1.0f, 1.0f, 1.0f});
-//    factory.syncToDevice();
-//    Pool<BSDFPicker> picker(1, IN_HOST | IN_DEVICE);
-//    picker.getHost()[0] = {{0, 0, 0}, {1.0f, 0.0f, 0.0f}};
-//    picker.copyToDevice();
-//
-//    Pool<Sphere> shape(2, IN_HOST | IN_DEVICE);
-//    Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
-//
-//    shape.getHost()[0] = {0,{ 0.0f, 0.0f, 5000.0f }, 4000.0f};
-//    shape.getHost()[1] = {0,{ 0.0f, 0.0f, 500.0f }, 100.0f};
-//    shape.copyToDevice();
-//    light.getHost()[0] = {{},{ { 1.0f, 1.0f, 1.0f } }};
-//    light.copyToDevice();
-//
-//    Pool<Object> object(2, IN_HOST | IN_DEVICE);
-//    object.getHost()[0] = {shape.getDevice(), picker.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
-//    object.getHost()[1] = {shape.getDevice() + 1, nullptr, light.getDevice()}; // bsdf.getDevice(), light.getDevice()};
-//    object.copyToDevice();
-//
-//    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
-//    cam.getHost()[0] = {{ 0.0f, 0.0f, 0.0f },{ 0.0f, 0.0f, 1.0f }, 0.66f * M_PI, 0.66f * M_PI};
-//    cam.copyToDevice();
-//
-//    render.init(object, cam, factory.getIndexNodeList(), sample);
-//}
-
-//void CornellBox(Render &render, size_t sample)
-//{
-//    Pool<Sphere> shape(7, IN_HOST | IN_DEVICE);
-//    Pool<ComputeBSDF> bsdf(5, IN_HOST | IN_DEVICE);
-//    Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
-//
-//    shape.getHost()[0] = {0, { -10000.0f, -3.0f, 5.0f }, 9999.0f};
-//    shape.getHost()[1] = {0, { 10000.0f, 3.0f, 5.0f }, 9999.0f};
-//    shape.getHost()[2] = {0, { 0.0f, 10000.0f, 5.0f }, 9999.0f};
-//    shape.getHost()[3] = {0, { 0.0f, -10000.0f, 5.0f }, 9999.0f};
-//    shape.getHost()[4] = {0, { 0.0f, 0.0f, 10001.0f }, 9999.0f};
-//    shape.getHost()[5] = {0, {0.0f, 1.5f, 1.8f}, 0.6f};
-//    shape.getHost()[6] = {0,{ 0.0f, 0.0f, -5001.0f }, 5001.0f};
-//
-//    bsdf.getHost()[0] = { // grey
-//        {}, {1.0f, 0.0f, 0.0f},
-//        {{0.75f, 0.75f, 0.75f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
-//    };
-//    bsdf.getHost()[1] = { // green
-//        {}, {1.0f, 0.0f, 0.0f},
-//        {{0.1f, 1.0f, 0.1f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
-//    };
-//    bsdf.getHost()[2] = { // red
-//        {}, {1.0f, 0.0f, 0.0f},
-//        {{1.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
-//    };
-//    bsdf.getHost()[3] = { // blue
-//        {}, {1.0f, 0.0f, 0.0f},
-//        {{0.0f, 0.0f, 1.0f}}, {{0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f}}
-//    };
-//    bsdf.getHost()[4] = { // white
-//        {},{ 1.0f, 0.0f, 0.0f },
-//        { { 1.0f, 1.0f, 1.0f } },{ { 0.0f, 0.0f, 0.0f } },{ { 0.0f, 0.0f, 0.0f } }
-//    };
-//    light.getHost()[0] = {{},{ { 1.0f, 1.0f, 1.0f } }};
-//
-//    shape.copyToDevice();
-//    bsdf.copyToDevice();
-//    light.copyToDevice();
-//
-//    Pool<Object> object(6, IN_HOST | IN_DEVICE);
-//    object.getHost()[0] = {shape.getDevice(), bsdf.getDevice() + 2, nullptr}; // bsdf.getDevice(), light.getDevice()};
-//    object.getHost()[1] = {shape.getDevice() + 1, bsdf.getDevice() + 3, nullptr}; // bsdf.getDevice(), light.getDevice()};
-//    object.getHost()[2] = {shape.getDevice() + 2, bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
-//    object.getHost()[3] = {shape.getDevice() + 3, bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
-//    object.getHost()[4] = {shape.getDevice() + 4, bsdf.getDevice(), nullptr}; // bsdf.getDevice(), light.getDevice()};
-//    object.getHost()[5] = {shape.getDevice() + 5, nullptr, light.getDevice()}; // bsdf.getDevice(), light.getDevice()};
-//    //object.getHost()[6] = { shape.getDevice() + 6, bsdf.getDevice() + 4, nullptr }; // bsdf.getDevice(), light.getDevice()};
-//    object.copyToDevice();
-//
-//    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
-//    cam.getHost()[0] = {{ 0.0f, 0.0f, 0.0f },{ 0.0f, 0.0f, 1.0f }, 0.66f * M_PI, 0.66f * M_PI};
-//    cam.copyToDevice();
-//
-//    render.init(object, cam, sample);
-//}
-
-void SmallPT(Render &render, size_t sample)
+void Scene::load(const char *file)
 {
-    BSDFFactory factor(6);
-    factor.createLambertian({0.75f, 0.25f, 0.25f});
-    factor.createLambertian({0.25f, 0.25f, 0.75f});
-    factor.createLambertian({0.75f, 0.75f, 0.75f});
-    factor.createLambertian({0.0f, 0.0f, 0.0f});
-    factor.createSpecRefl({0.999f, 0.999f, 0.999f});
-    factor.createSpecTrans({0.999f, 0.999f, 0.999f});
-    factor.syncToDevice();
-    Pool<BSDFPicker> picker(6, IN_DEVICE | IN_HOST);
-    picker.getHost()[0] = {{0,0,0},{1.0f, 0.0f,0.0f}};
-    picker.getHost()[1] = {{1,0,0},{1.0f, 0.0f,0.0f}};
-    picker.getHost()[2] = {{2,0,0},{1.0f, 0.0f,0.0f}};
-    picker.getHost()[3] = {{3,0,0},{1.0f, 0.0f,0.0f}};
-    picker.getHost()[4] = {{0,4,0},{0.0f, 1.0f,0.0f}};
-    picker.getHost()[5] = {{5,0,0},{1.0f, 0.0f,0.0f}};
-    picker.copyToDevice();
+    std::ifstream f(file, std::ifstream::in);
+    std::istringstream iss;
+    std::string line;
+    int id;
+    while (f.good())
+    {
+        std::getline(f, line);
+        if (line == "[camera]")
+        {
+            LogInfo("Scene: load camera info...");
+            std::getline(f, line);
+            if (!line.empty())
+            {
+                iss = std::istringstream(line);
+                _camera = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
+                Camera &cam = _camera->getHost()[0];
+                iss >> cam.pos
+                    >> cam.dir
+                    >> cam.fov_h
+                    >> cam.fov_v;
+                cam.dir.norm();
+                _camera->copyToDevice();
+            }
+        }
+        else if (line == "[bsdf]")
+        {
+            LogInfo("Scene: load bsdf info...");
+            while (f.good())
+            {
+                std::getline(f, line);
+                if (!line.empty())
+                {
+                    iss = std::istringstream(line);
+                    iss >> id;
+                    Color R = {0.0f, 0.0f, 0.0f};
+                    switch (id)
+                    {
+                        case LAMBERTIAN:
+                            iss >> R.r >> R.g >> R.b;
+                            bsdf_factory.createLambertian(R);
+                            break;
+                        case SPEC_REFL:
+                            iss >> R.r >> R.g >> R.b;
+                            bsdf_factory.createSpecRefl(R);
+                            break;
+                        case SPEC_TRANS:
+                            iss >> R.r >> R.g >> R.b;
+                            bsdf_factory.createSpecTrans(R);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                else break;
+            }
+        }
+        else if (line == "[bsdf-picker]")
+        {
+            LogInfo("Scene: load bsdf-picker info...");
+            while (f.good())
+            {
+                std::getline(f, line);
+                if (!line.empty())
+                {
+                    iss = std::istringstream(line);
+                    bsdf_handle_t models[3];
+                    float cdf[3];
+                    iss >> models[0] >> models[1] >> models[2]
+                        >> cdf[0] >> cdf[1] >> cdf[2];
+                    bsdf_factory.createPicker(models, cdf);
+                }
+                else break;
+            }
+        }
+        else if (line == "[shape]")
+        {
+            LogInfo("Scene: load shape info...");
+            while (f.good())
+            {
+                std::getline(f, line);
+                if (!line.empty())
+                {
+                    iss = std::istringstream(line);
+                    ShapeEntity s;
+                    iss >> s;
+                    shape_factory.createShape(s);
+                }
+                else break;
+            }
+        }
+        else if (line == "[light]")
+        {
+            LogInfo("Scene: load light info...");
+            while (f.good())
+            {
+                std::getline(f, line);
+                if (!line.empty())
+                {
+                    iss = std::istringstream(line);
+                    iss >> id;
+                    Color R = {0.0f, 0.0f, 0.0f};
+                    iss >> R.r >> R.g >> R.b;
+                    light_factory.createPointLight(R);
+                }
+                else break;
+            }
+        }
+        else if (line == "[texture]")
+        {
+            LogInfo("Scene: load texture info...");
+            while (f.good())
+            {
+                std::getline(f, line);
+                if (!line.empty())
+                {
+                    texture_factory.createTexture(line.data());
+                }
+                else break;
+            }
+        }
+        else if (line == "[texture-mapping]")
+        {
+            LogInfo("Scene: load texture-mapping info...");
+            while (f.good())
+            {
+                std::getline(f, line);
+                if (!line.empty())
+                {
+                    iss = std::istringstream(line);
+                    shape_handle_t shape_id;
+                    tex_handle_t tex_id;
+                    iss >> shape_id >> tex_id;
+                    ShapeEntity * shape = shape_factory.getHost(shape_id);
+                    if (shape)
+                    {
+                        iss >> shape->triangle.t1
+                            >> shape->triangle.t2
+                            >> shape->triangle.t3;
+                        shape->triangle.tex = texture_factory.getDevice(tex_id);
+                    }
+                    else
+                    {
+                        ShowErrorAndExit("Scene: bad texture mapping");
+                    }
+                }
+                else break;
+            }
+        }
+        else if (line == "[object]")
+        {
+            LogInfo("Scene: load object info...");
+            while (f.good())
+            {
+                std::getline(f, line);
+                if (!line.empty())
+                {
+                    iss = std::istringstream(line);
+                    shape_handle_t shape_id;
+                    bsdf_handle_t picker_id;
+                    light_handle_t light_id;
+                    iss >> shape_id >> picker_id >> light_id;
+                    Object o = {
+                        shape_id ? shape_factory.getDevice(shape_id - 1) : nullptr,
+                        picker_id ? bsdf_factory.getDevice_picker(picker_id - 1) : nullptr,
+                        light_id ? light_factory.getDevice(light_id - 1) : nullptr
+                    };
+                    void *shape_host = shape_id ? shape_factory.getHost(shape_id - 1) : nullptr;
+                    object_factory.createObject(o);
+                    bbox_factory.update(shape_host);
+                }
+                else break;
+            }
+        }
+    }
 
-    Pool<Sphere> shape(9, IN_HOST | IN_DEVICE);
-    Pool<struct Rectangle> rect(1, IN_HOST | IN_DEVICE);
-    Pool<ComputeLight> light(1, IN_HOST | IN_DEVICE);
-
-    shape.getHost()[0] = {1,{1e3f + 1.0f, 40.8f, 81.6f}, 1e3f};
-    shape.getHost()[1] = {1,{-1e3f + 99.0f, 40.8f, 81.6f}, 1e3f};
-    shape.getHost()[2] = {1,{50.0f, 40.8f, 1e3f}, 1e3f};
-    shape.getHost()[3] = {1,{50.0f, 40.8f, -1e3f + 170.0f}, 1e3f};
-    shape.getHost()[4] = {1,{50.0f, 1e3f, 81.6f}, 1e3f};
-    shape.getHost()[5] = {1,{50.0f, -1e3f + 81.6f, 81.6f}, 1e3f};
-    shape.getHost()[6] = {0,{27.0f, 16.5f, 47.0f}, 16.5f};
-    shape.getHost()[7] = {0,{73.0f, 16.5f, 78.0f}, 16.5f};
-    shape.getHost()[8] = {0,{50.0f, 681.6f - .27f,81.6f}, 600.0f};
-    rect.getHost()[0] = {2, {10.0f, 16.5f, 78.0f}, {20.0f, 0.0f, 0.0f}, {0.0f, 20.0f, 0.0f}};
-    light.getHost()[0] = {{},{ { 12.0f, 12.0f, 12.0f } }};
-
-    shape.copyToDevice();
-    rect.copyToDevice();
-    light.copyToDevice();
-
-    Pool<Object> object(10, IN_HOST | IN_DEVICE);
-    object.getHost()[0] = {shape.getDevice()    , picker.getDevice() + 0, nullptr};
-    object.getHost()[1] = {shape.getDevice() + 1, picker.getDevice() + 1, nullptr};
-    object.getHost()[2] = {shape.getDevice() + 2, picker.getDevice() + 2, nullptr};
-    object.getHost()[3] = {shape.getDevice() + 3, picker.getDevice() + 3, nullptr};
-    object.getHost()[4] = {shape.getDevice() + 4, picker.getDevice() + 2, nullptr};
-    object.getHost()[5] = {shape.getDevice() + 5, picker.getDevice() + 2, nullptr};
-
-    object.getHost()[6] = {shape.getDevice() + 6, picker.getDevice() + 4, nullptr};
-    object.getHost()[7] = {shape.getDevice() + 7, picker.getDevice() + 4, nullptr};
-    object.getHost()[9] = {rect.getDevice(), picker.getDevice() + 1, nullptr};
-
-    object.getHost()[8] = {shape.getDevice() + 8, nullptr, light.getDevice()};
-
-    object.copyToDevice();
-
-    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
-    cam.getHost()[0] = {{50.0f, 52.0f, 169.9f},Vector(0.0f, -0.042612f, -1.0f).norm(), 1.9043f, 2.0213f};
-    cam.copyToDevice();
-
-    render.init(object, cam, factor.getIndexNodeList(), sample);
+    if (object_factory.getSize() == 0)
+        ShowErrorAndExit("Scene: no object defined.");
+    bsdf().syncToDevice();
+    shape().syncToDevice();
+    light().syncToDevice();
+    texture().syncToDevice();
+    object().syncToDevice();
 }
 
 #ifndef USE_OPENGL
 
 int main(void)
 {
+    Scene scene;
+    scene.load("scene.txt");
+    if (scene.camera() == nullptr)
+    {
+        scene.camera() = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
+        scene.camera()->getHost()[0] = {
+            {50.0f, 52.0f, 169.9f},
+            Vector(0.0f, -0.042612f, -1.0f).norm(),
+            1.9043f, 2.0213f};
+        scene.camera()->copyToDevice();
+    }
+
     Render render(640, 480);
-    SmallPT(render, 500);
+    render.init(scene, 100);
     while (render.update(nullptr))
     {
         printf("\r%.2f%", render.progress() * 100.0f);
@@ -394,12 +500,22 @@ int main(void)
 #else
 
 static Render render(W_WIDTH, W_HEIGHT);
+static Scene *g_scene;
 
 void GLInitCallback()
 {
-    //TwoBall(render, 1000);
-    //CornellBox(render, 1000);
-    SmallPT(render, 500);
+    g_scene = new Scene();
+    (*g_scene).load("scene.txt");
+    render.init((*g_scene), 1000);
+    if ((*g_scene).camera() == nullptr)
+    {
+        (*g_scene).camera() = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
+        (*g_scene).camera()->getHost()[0] = {
+            {50.0f, 52.0f, 169.9f},
+            Vector(0.0f, -0.042612f, -1.0f).norm(),
+            1.9043f, 2.0213f};
+        (*g_scene).camera()->copyToDevice();
+    }
 }
 const char * GLWindowTitle()
 {
@@ -410,17 +526,19 @@ void GLOnKeyPress(int key)
     switch (key)
     {
         case 0x57: // W
-            render.moveZ(-0.1f); break;
+            render.moveZ(-1.f); break;
         case 0x53: // S
-            render.moveZ(0.1f); break;
+            render.moveZ(1.f); break;
         case 0x41: // A
-            render.moveX(-0.1f); break;
+            render.moveX(-1.f); break;
         case 0x44: // D
-            render.moveX(0.1f); break;
+            render.moveX(1.f); break;
         case 0x45: // E
-            render.changFOV_v(-0.001f); break;
+            render.moveY(1.f); break;
+            //render.changFOV_v(-0.001f); break;
         case 0x51: // Q
-            render.changFOV_v(0.001f); break;
+            render.moveY(-1.f); break;
+            //render.changFOV_v(0.001f); break;
         case 0x5A: // Z
             render.changFOV_h(-0.001f); break;
         case 0x43: // C
@@ -438,6 +556,7 @@ bool GLUpdateCallback()
 void GLDoneCallback()
 {
     render.done();
+    DeviceMemoryManager::Summary();
 }
 
 #endif
