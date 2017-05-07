@@ -4,13 +4,16 @@
 #include <device_launch_parameters.h>
 #include <cstdio>
 
+// #define USE_OPENGL
+
 #ifdef USE_OPENGL
 
 #include <Windows.h>
 
-void PrintError(const char *s)
+void ShowErrorAndExit(const char *s)
 {
     MessageBox(NULL, s, "SHUTDOWN ERROR", MB_OK | MB_ICONINFORMATION);
+    abort();
 }
 
 #include <fstream>
@@ -18,9 +21,10 @@ static std::ofstream Logger("log.txt");
 
 #else
 
-void PrintError(const char *s)
+void ShowErrorAndExit(const char *s)
 {
     fprintf(stderr, "%s\n", s);
+    abort();
 }
 
 #include <iostream>
@@ -45,8 +49,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
     if (code != cudaSuccess)
     {
 #ifdef USE_OPENGL
-        sprintf(buffer, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-        PrintError(buffer);
+        sprintf_s(buffer, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+        ShowErrorAndExit(buffer);
+        // PrintError(buffer);
 #else
         fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
 #endif

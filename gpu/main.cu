@@ -4,12 +4,18 @@
 //#include <thrust/host_vector.h>
 //#include <thrust/device_vector.h>
 
+// Fast Ray-AABB
+// https://tavianator.com/fast-branchless-raybounding-box-intersections/
+// Fast Intersection of all types, static/moving
+// http://www.realtimerendering.com/intersections.html
+
 //#define USE_OPENGL
+#define USE_GRID 1
 
 #include "common.h"
 #include "struct.h"
-#include "kernels.h"
 #include "grid.h"
+#include "kernels.h"
 
 #include "mem.h"
 
@@ -31,95 +37,137 @@ Color Clamp(const Color &c)
     return c2;
 }
 
+#define BLOCK_SIZE 8
+
 class Render
 {
 public:
     Render(size_t w, size_t h)
         : W(w), H(h),
         color(w * h, IN_HOST | IN_DEVICE),
-        c2(w * h, IN_DEVICE),
-        ray0(w * h, IN_DEVICE),
-        ray1(w * h, IN_DEVICE),
-        state(w * h, IN_DEVICE),
-        scene(nullptr), cam(0), auto_clear(true)
+        states(BLOCK_SIZE * BLOCK_SIZE, IN_DEVICE),
+        scene(nullptr), auto_clear(true),
+        grid(nullptr)
     {}
-    void init(Scene &_scene, Pool<Camera> &cam, size_t samp)
+    void init(Scene &_scene, size_t samp)
     {
-        this->scene = &_scene;
-        this->cam.swap(cam);
+        scene = &_scene;
         sample = samp;
         s = samp;
 
-        const int edge = 8;
-        dim3 blockD(edge, edge);
-        dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
+        dim3 blockD(BLOCK_SIZE, BLOCK_SIZE);
+        dim3 gridD(1, 1);
+#if USE_GRID
+        this->grid = new Grid(scene->object().getHost(),
+                              scene->object().getSize(),
+                              scene->bbox().getBBox(),
+                              scene->bbox().getObjectBBoxs());
+#endif
 
-        init_rand <<<gridD, blockD>>> (state.getDevice());
-        CheckCUDAError(cudaGetLastError());
+
+        init_rand <<<gridD, blockD>>> (states.getDevice());
+        CheckCUDAError(cudaDeviceSynchronize());
     }
     bool update(unsigned char *data)
     {
         if (s == 0) return false;
         --s;
 
-        const int edge = 8;
-        dim3 blockD(edge, edge);
-        dim3 gridD((W + edge - 1) / edge, (H + edge - 1) / edge);
+        dim3 blockD(BLOCK_SIZE, BLOCK_SIZE);
+        dim3 gridD((W + BLOCK_SIZE - 1) / BLOCK_SIZE,
+            (H + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
-        init_ray <<<gridD, blockD>>> (ray0.getDevice(), cam.getDevice(), state.getDevice());
-        //ray2color<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice());
-        //ray_depth<<<gridD,blockD>>>(color.getDevice(), ray0.getDevice(),
-        //							  obj.getDevice(), obj.getSize());
-        //ray_distance<<<gridD,blockD>>>(ray0.getDevice(), ray1.getDevice(), color.getDevice(),
-        //                               obj.getDevice(), obj.getSize()
-        //                               bsdf, state.getDevice());
-        CheckCUDAError(cudaGetLastError());
-
-        trace_ray <<<gridD, blockD>>> (ray0.getDevice(), ray1.getDevice(), c2.getDevice(),
-                                       scene->object().getDevice(), scene->object().getSize(),
-                                       scene->bsdf().getDevice_bsdf(),
-                                       state.getDevice());
-        CheckCUDAError(cudaGetLastError());
-        scale_add <<<gridD, blockD>>> (color.getDevice(), c2.getDevice(), 50.0f / (float)sample);
-        CheckCUDAError(cudaGetLastError());
-
-        color.copyFromDevice();
-#ifdef USE_OPENGL
-        //for (size_t i = 0; i < color.getSize(); ++i)
-        //{
-        //	data[i * 3] = clamp((color.getHost()[i].r)) * 255;
-        //	data[i * 3 + 1] = clamp((color.getHost()[i].g)) * 255;
-        //	data[i * 3 + 2] = clamp((color.getHost()[i].b)) * 255;
-        //}
-
-        for (size_t i = 0; i < color.getSize(); ++i)
+        float px[] = {0.0f, 0.0f, 1.0f, 1.0f};
+        float py[] = {0.0f, 1.0f, 1.0f, 0.0f};
+        for (int corner = 0; corner < 4; ++corner)
         {
-            data[i * 3] = pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5;
-            data[i * 3 + 1] = pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5;
-            data[i * 3 + 2] = pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5;
+
+#if 0
+            ray_depth<<<gridD, blockD>>>(color.getDevice(), scene->object().getSize(),
+                      scene->camera()->getDevice(), states.getDevice());
+#endif
+
+#if 1
+
+#if USE_GRID
+
+            trace_ray_grid<<<gridD, blockD>>>
+                (color.getDevice(), scene->camera()->getDevice(),
+                 grid->cells.getDevice(), grid->cells_size.getDevice(),
+                 states.getDevice(), px[corner], py[corner], (float)sample,
+                 grid->x0, grid->y0, grid->z0,
+                 grid->x1, grid->y1, grid->z1,
+                 grid->nx, grid->ny, grid->nz);
+
+#else
+            super_trace_ray <<<gridD, blockD >>>
+                (color.getDevice(), scene->camera()->getDevice(),
+                 scene->object().getSize(),
+                 states.getDevice(),
+                 px[corner], py[corner], (float)sample);
+#endif
+
+#endif
+            CheckCUDAError(cudaDeviceSynchronize());
+
         }
 
-        //for (size_t i = 0; i < color.getSize(); ++i)
-        //{
-        //	Color c = Clamp(color.getHost()[i]);
-        //	data[i * 3] = c.r * 255;
-        //	data[i * 3 + 1] = c.g * 255;
-        //	data[i * 3 + 2] = c.b * 255;
-        //}
+#ifdef USE_OPENGL
+        if (s % 10 == 0)
+        {
+            color.copyFromDevice();
+            for (size_t i = 0; i < color.getSize(); ++i)
+            {
+                data[i * 3] = (char)(pow(clamp(color.getHost()[i].r), 1 / 2.2) * 255 + .5);
+                data[i * 3 + 1] = (char)(pow(clamp(color.getHost()[i].g), 1 / 2.2) * 255 + .5);
+                data[i * 3 + 2] = (char)(pow(clamp(color.getHost()[i].b), 1 / 2.2) * 255 + .5);
+            }
 
-        //Color maxv = { 0.0f, 0.0f, 0.0f };
-        //for (size_t i = 0; i < color.getSize(); ++i)
-        //{
-        //	maxv.r = max(maxv.r, color.getHost()[i].r);
-        //	maxv.g = max(maxv.g, color.getHost()[i].g);
-        //	maxv.b = max(maxv.b, color.getHost()[i].b);
-        //}
-        //for (size_t i = 0; i < color.getSize(); ++i)
-        //{
-        //	data[i * 3] = clamp((/*maxv.r - */color.getHost()[i].r) / maxv.r) * 255;
-        //	data[i * 3 + 1] = clamp((/*maxv.g - */color.getHost()[i].g) / maxv.g) * 255;
-        //	data[i * 3 + 2] = clamp((/*maxv.b - */color.getHost()[i].b) / maxv.b) * 255;
-        //}
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //	data[i * 3] = clamp((color.getHost()[i].r)) * 255;
+            //	data[i * 3 + 1] = clamp((color.getHost()[i].g)) * 255;
+            //	data[i * 3 + 2] = clamp((color.getHost()[i].b)) * 255;
+            //}
+
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //	Color c = Clamp(color.getHost()[i]);
+            //	data[i * 3] = c.r * 255;
+            //	data[i * 3 + 1] = c.g * 255;
+            //	data[i * 3 + 2] = c.b * 255;
+            //}
+
+            //Color maxv = {0.0f, 0.0f, 0.0f};
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //    maxv.r = max(maxv.r, color.getHost()[i].r);
+            //    maxv.g = max(maxv.g, color.getHost()[i].g);
+            //    maxv.b = max(maxv.b, color.getHost()[i].b);
+            //}
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //    data[i * 3] = clamp((color.getHost()[i].r) / (maxv.r)) * 255;
+            //    data[i * 3 + 1] = clamp((color.getHost()[i].g) / (maxv.g)) * 255;
+            //    data[i * 3 + 2] = clamp((color.getHost()[i].b) / (maxv.b)) * 255;
+            //}
+
+            //float maxv = 0.0f, minv = 1e10f;
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //    maxv = max(maxv, color.getHost()[i].r);
+            //    if (!color.getHost()[i].v.isZero())
+            //    {
+            //        minv = min(minv, color.getHost()[i].r);
+            //    }
+            //}
+            //for (size_t i = 0; i < color.getSize(); ++i)
+            //{
+            //    data[i * 3] = data[i * 3 + 1] = data[i * 3 + 2] = 0;
+            //    if (!color.getHost()[i].v.isZero())
+            //    data[i * 3] = data[i * 3 + 1] = data[i * 3 + 2] = 255 - clamp((color.getHost()[i].r - minv) / (maxv - minv)) * 255;
+            //}
+        }
 #endif
         CheckCUDAError(cudaGetLastError());
         CheckCUDAError(cudaDeviceSynchronize());
@@ -132,11 +180,26 @@ public:
     }
     const char * getInfo()
     {
+        Color maxv = {0.0f, 0.0f, 0.0f}, minv = {1e5, 1e5, 1e5};
+        for (size_t i = 0; i < color.getSize(); ++i)
+        {
+            maxv.r = max(maxv.r, color.getHost()[i].r);
+            maxv.g = max(maxv.g, color.getHost()[i].g);
+            maxv.b = max(maxv.b, color.getHost()[i].b);
+            if (!color.getHost()[i].v.isZero())
+            {
+                minv.r = min(minv.r, color.getHost()[i].r);
+                minv.g = min(minv.g, color.getHost()[i].g);
+                minv.b = min(minv.b, color.getHost()[i].b);
+            }
+        }
         static char info[256];
-        sprintf(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f)",
-                  sample - s,
-                  cam.getHost()->pos.x, cam.getHost()->pos.y, cam.getHost()->pos.z,
-                  cam.getHost()->fov_h, cam.getHost()->fov_v);
+        sprintf(info, "%d (%.2f, %.2f, %.2f) (%.4f, %.4f) min/max(%.2f/%.2f, %.2f/%.2f, %.2f/%.2f)",
+                sample - s,
+                scene->camera()->getHost()->pos.x, scene->camera()->getHost()->pos.y, scene->camera()->getHost()->pos.z,
+                scene->camera()->getHost()->fov_h, scene->camera()->getHost()->fov_v,
+                minv.x, maxv.x, minv.y, maxv.y, minv.z, maxv.z);
+
         return info;
     }
     void clearScreen()
@@ -148,32 +211,32 @@ public:
     }
     void changFOV_h(float f)
     {
-        cam.getHost()->fov_h += f;
-        cam.copyToDevice();
+        scene->camera()->getHost()->fov_h += f;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void changFOV_v(float f)
     {
-        cam.getHost()->fov_v += f;
-        cam.copyToDevice();
+        scene->camera()->getHost()->fov_v += f;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void moveX(float v)
     {
-        cam.getHost()->pos.x += v;
-        cam.copyToDevice();
+        scene->camera()->getHost()->pos.x += v;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void moveY(float v)
     {
-        cam.getHost()->pos.y += v;
-        cam.copyToDevice();
+        scene->camera()->getHost()->pos.y += v;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     void moveZ(float v)
     {
-        cam.getHost()->pos.z += v;
-        cam.copyToDevice();
+        scene->camera()->getHost()->pos.z += v;
+        scene->camera()->copyToDevice();
         if (auto_clear) clearScreen();
     }
     float ratio()
@@ -191,6 +254,7 @@ public:
     }
     void display(const char *filename)
     {
+        color.copyFromDevice();
         int h = H, w = W;
         Color *c = color.getHost();
         FILE *f;
@@ -208,12 +272,11 @@ public:
 
 private:
     size_t W, H;
-    Pool<Color> color, c2;
-    Pool<Ray> ray0, ray1;
-    Pool<curandState> state;
+    Pool<Color> color;
+    Pool<curandState> states;
 
     Scene *scene;
-    Pool<Camera> cam;
+    Grid *grid;
 
     // DEBUG
     size_t sample, s;
@@ -229,8 +292,26 @@ void Scene::load(const char *file)
     while (f.good())
     {
         std::getline(f, line);
-        if (line == "[bsdf]")
+        if (line == "[camera]")
         {
+            LogInfo("Scene: load camera info...");
+            std::getline(f, line);
+            if (!line.empty())
+            {
+                iss = std::istringstream(line);
+                _camera = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
+                Camera &cam = _camera->getHost()[0];
+                iss >> cam.pos
+                    >> cam.dir
+                    >> cam.fov_h
+                    >> cam.fov_v;
+                cam.dir.norm();
+                _camera->copyToDevice();
+            }
+        }
+        else if (line == "[bsdf]")
+        {
+            LogInfo("Scene: load bsdf info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -260,8 +341,9 @@ void Scene::load(const char *file)
                 else break;
             }
         }
-        if (line == "[bsdf-picker]")
+        else if (line == "[bsdf-picker]")
         {
+            LogInfo("Scene: load bsdf-picker info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -279,6 +361,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[shape]")
         {
+            LogInfo("Scene: load shape info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -294,6 +377,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[light]")
         {
+            LogInfo("Scene: load light info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -310,6 +394,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[texture]")
         {
+            LogInfo("Scene: load texture info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -322,6 +407,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[texture-mapping]")
         {
+            LogInfo("Scene: load texture-mapping info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -341,8 +427,7 @@ void Scene::load(const char *file)
                     }
                     else
                     {
-                        PrintError("Scene: bad texture mapping");
-                        exit(1);
+                        ShowErrorAndExit("Scene: bad texture mapping");
                     }
                 }
                 else break;
@@ -350,6 +435,7 @@ void Scene::load(const char *file)
         }
         else if (line == "[object]")
         {
+            LogInfo("Scene: load object info...");
             while (f.good())
             {
                 std::getline(f, line);
@@ -365,12 +451,22 @@ void Scene::load(const char *file)
                         picker_id ? bsdf_factory.getDevice_picker(picker_id - 1) : nullptr,
                         light_id ? light_factory.getDevice(light_id - 1) : nullptr
                     };
+                    void *shape_host = shape_id ? shape_factory.getHost(shape_id - 1) : nullptr;
                     object_factory.createObject(o);
+                    bbox_factory.update(shape_host);
                 }
                 else break;
             }
         }
     }
+
+    if (object_factory.getSize() == 0)
+        ShowErrorAndExit("Scene: no object defined.");
+    bsdf().syncToDevice();
+    shape().syncToDevice();
+    light().syncToDevice();
+    texture().syncToDevice();
+    object().syncToDevice();
 }
 
 #ifndef USE_OPENGL
@@ -379,12 +475,18 @@ int main(void)
 {
     Scene scene;
     scene.load("scene.txt");
-    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
-    cam.getHost()[0] = {{50.0f, 52.0f, 169.9f},Vector(0.0f, -0.042612f, -1.0f).norm(), 1.9043f, 2.0213f};
-    cam.copyToDevice();
+    if (scene.camera() == nullptr)
+    {
+        scene.camera() = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
+        scene.camera()->getHost()[0] = {
+            {50.0f, 52.0f, 169.9f},
+            Vector(0.0f, -0.042612f, -1.0f).norm(),
+            1.9043f, 2.0213f};
+        scene.camera()->copyToDevice();
+    }
 
     Render render(640, 480);
-    render.init(scene, cam, 100);
+    render.init(scene, 100);
     while (render.update(nullptr))
     {
         printf("\r%.2f%", render.progress() * 100.0f);
@@ -398,15 +500,22 @@ int main(void)
 #else
 
 static Render render(W_WIDTH, W_HEIGHT);
-static Scene scene;
+static Scene *g_scene;
 
 void GLInitCallback()
 {
-    scene.load("scene.txt");
-    Pool<Camera> cam(1, IN_HOST | IN_DEVICE);
-    cam.getHost()[0] = {{50.0f, 52.0f, 169.9f},Vector(0.0f, -0.042612f, -1.0f).norm(), 1.9043f, 2.0213f};
-    cam.copyToDevice();
-    render.init(scene, cam, 500);
+    g_scene = new Scene();
+    (*g_scene).load("scene.txt");
+    render.init((*g_scene), 1000);
+    if ((*g_scene).camera() == nullptr)
+    {
+        (*g_scene).camera() = new Pool<Camera>(1, IN_HOST | IN_DEVICE);
+        (*g_scene).camera()->getHost()[0] = {
+            {50.0f, 52.0f, 169.9f},
+            Vector(0.0f, -0.042612f, -1.0f).norm(),
+            1.9043f, 2.0213f};
+        (*g_scene).camera()->copyToDevice();
+    }
 }
 const char * GLWindowTitle()
 {
@@ -417,17 +526,19 @@ void GLOnKeyPress(int key)
     switch (key)
     {
         case 0x57: // W
-            render.moveZ(-0.1f); break;
+            render.moveZ(-1.f); break;
         case 0x53: // S
-            render.moveZ(0.1f); break;
+            render.moveZ(1.f); break;
         case 0x41: // A
-            render.moveX(-0.1f); break;
+            render.moveX(-1.f); break;
         case 0x44: // D
-            render.moveX(0.1f); break;
+            render.moveX(1.f); break;
         case 0x45: // E
-            render.changFOV_v(-0.001f); break;
+            render.moveY(1.f); break;
+            //render.changFOV_v(-0.001f); break;
         case 0x51: // Q
-            render.changFOV_v(0.001f); break;
+            render.moveY(-1.f); break;
+            //render.changFOV_v(0.001f); break;
         case 0x5A: // Z
             render.changFOV_h(-0.001f); break;
         case 0x43: // C
@@ -445,6 +556,7 @@ bool GLUpdateCallback()
 void GLDoneCallback()
 {
     render.done();
+    DeviceMemoryManager::Summary();
 }
 
 #endif
