@@ -11,7 +11,7 @@ test: clean $(TARGET)
 	open result.ppm
 
 $(TARGET):
-	g++ jnf_renderer.cpp $(OBJECTS) $(MODELS) $(UTILITIES) $(FLAGS) -o $@
+	g++ main.cpp $(OBJECTS) $(MODELS) $(UTILITIES) $(FLAGS) -o $@
 
 clean:
 	rm -f renderer
