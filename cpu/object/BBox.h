@@ -8,7 +8,7 @@
 #ifndef _BBOX_H
 #define _BBOX_H
 
-#include "Utilities.h"
+#include "../Utilities.h"
 class Ray;
 
 class BBox

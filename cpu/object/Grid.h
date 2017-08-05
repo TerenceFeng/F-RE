@@ -10,7 +10,7 @@
 #define _GRID_H
 
 #include "BBox.h"
-#include "Utilities.h"
+#include "../Utilities.h"
 #include "Object.h"
 
 class Mesh

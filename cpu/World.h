@@ -18,7 +18,7 @@
 #include "Light.h"
 #include "RGBColor.h"
 #include "Utilities.h"
-#include "Object.h"
+#include "object/Object.h"
 
 #include <vector>
 

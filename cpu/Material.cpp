@@ -7,7 +7,7 @@
 # ====================================================*/
 #include "World.h"
 #include "Material.h"
-#include "Object.h"
+#include "object/Object.h"
 #include <cmath>
 #include <cstdio>
 

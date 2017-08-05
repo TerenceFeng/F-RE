@@ -9,10 +9,10 @@
 
 #include <vector>
 #include "BBox.h"
-#include "RGBColor.h"
-#include "Utilities.h"
-#include "ShadeRec.h"
-#include "Material.h"
+#include "../RGBColor.h"
+#include "../Utilities.h"
+#include "../ShadeRec.h"
+#include "../Material.h"
 
 class Sampler;
 
@@ -25,8 +25,8 @@ public:
 	Material *material_ptr;
 	Sampler *sampler_ptr;
 
-	Object(void);
-	virtual ~Object(void);
+	Object(void) {}
+	virtual ~Object(void) {}
 
 	inline void set_material(Material *m_ptr_) { material_ptr = m_ptr_; }
 	inline void set_sampler(Sampler *s_ptr_) {sampler_ptr = s_ptr_; }
@@ -36,29 +36,89 @@ public:
 
 	virtual BBox get_bounding_box(void) = 0;
 
-	virtual Point3D sample(void);
-	virtual float pdf(ShadeRec&);
-	virtual Normal get_normal(const Point3D&);
+	virtual Point3D sample(void) {
+        return Point3D();
+    }
+	virtual float pdf(ShadeRec&) {
+        return 1;
+    }
+	virtual Normal get_normal(const Point3D&) {
+        return Normal();
+    }
 
 };
 
 class Sphere: public Object
 {
+private:
+    Point3D center;
+    float radius;
+
 public:
 
-	Sphere();
-	/* center radius color */
-	Sphere(const Point3D& ct, const float r, Material* m);
+    Sphere() {}
+    /* center radius color */
+    Sphere(const Point3D& ct, const float r, Material* m) :
+        center(ct),
+        radius(r)
+    {
+        Object::set_material(m);
+    }
 
-	bool hit(const Ray& ray, float& tmin, ShadeRec& sr);
-	bool shadow_hit(const Ray& ray, float& tmin);
-	void set_center(float x, float y, float z);
-	void set_radius(float r);
-	virtual BBox get_bounding_box(void);
+    bool hit(const Ray& ray, float& tmin, ShadeRec& sr)
+    {
+        float t;
+        Vector3D temp = ray.o - center;
+        float a = ray.d * ray.d;
+        float b = ray.d * 2.0f * temp;
+        float c = temp * temp - radius * radius;
+        float disc = b * b - 4.0f * a * c;
 
-private:
-	Point3D center;
-	float radius;
+        if (disc < 0)
+            return false;
+        else {
+            float e = sqrtf(disc);
+            float denom = 2.0 * a;
+            t = (-b - e) / denom;
+            if (t > eps) {
+                tmin = t;
+                sr.normal = temp + ray.d * t;
+                sr.local_hit_point = ray.o + ray.d * t;
+                return true;
+            }
+
+            t = (-b + e) / denom;
+            if (t > eps) {
+                tmin = t;
+                sr.normal = temp + ray.d * t;
+                sr.local_hit_point = ray.o + ray.d * t;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool shadow_hit(const Ray& ray, float& tmin)
+    {
+        ShadeRec dummy_sr;
+        return hit(ray, tmin, dummy_sr);
+    }
+
+    void set_center(float x, float y, float z)
+    {
+        center = Point3D(x, y, z);
+    }
+    void set_radius(float r)
+    {
+        radius = r;
+    }
+    virtual BBox get_bounding_box(void)
+    {
+        float dist = sqrtf(3 * radius * radius);
+        return BBox(center.x - dist, center.y - dist, center.z - dist,
+                center.x + dist, center.y + dist, center.z + dist);
+    }
+
 };
 
 class Plane: public Object

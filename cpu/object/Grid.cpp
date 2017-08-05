@@ -6,7 +6,7 @@
 #   File Name     : Grid.cpp
 # ====================================================*/
 
-#include "ply.h"
+#include "../ply.h"
 #include "Grid.h"
 #include <cfloat>
 #include <iostream>

@@ -6,15 +6,15 @@
 #   File Name     : ray_tracer.cpp
 #   Last Modified : 2017-03-17 18:25
 # ====================================================*/
-#include "Grid.h"
+#include "object/Grid.h"
 #include "World.h"
 #include "camera.h"
-#include "Sampler.h"
+#include "sampler.h"
 #include "RGBColor.h"
 #include "ShadeRec.h"
 #include "Material.h"
 #include "Utilities.h"
-#include "Object.h"
+#include "object/Object.h"
 
 /* global variables */
 World world;
@@ -209,12 +209,12 @@ int
 main(int argc, char ** argv)
 {
 
-	sampler = NRooks(1000);
+    sampler = NRooks(100);
 	sampler.map_samples_to_hemisphere(1);
 
 	if (argc == 2)
 	{
-		read_ply_file(argv[1]);
+        read_ply_file(argv[1]);
 	}
 	// test_path_tracing();
 	test_cornell_box();

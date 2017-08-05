@@ -13,7 +13,7 @@
 # ====================================================*/
 
 #include "BRDF.h"
-#include "Sampler.h"
+#include "sampler.h"
 #include <cmath>
 #include <cstdio>
 

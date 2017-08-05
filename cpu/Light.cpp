@@ -10,7 +10,7 @@
 #include "World.h"
 #include "Sampler.h"
 #include "Material.h"
-#include "Object.h"
+#include "object/Object.h"
 #include <cfloat>
 
 extern World world;

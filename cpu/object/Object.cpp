@@ -6,8 +6,8 @@
 # ====================================================*/
 
 #include "Object.h"
-#include "ShadeRec.h"
-#include "sampler.h"
+#include "../ShadeRec.h"
+#include "../sampler.h"
 #include <cmath>
 #include <cfloat>
 #include <algorithm>
@@ -21,83 +21,78 @@ clamp(float x, float min, float max)
 }
 
 /* NOTE: Implementation of Object */
-Object::Object(void) {}
-
-Object::~Object(void)
-{	delete material_ptr; }
-
-Point3D
-Object::sample(void)
-{	return Point3D();}
-float
-Object::pdf(ShadeRec&)
-{	return 1; }
-Normal
-Object::get_normal(const Point3D&)
-{	return Normal(); }
+// Point3D
+// Object::sample(void)
+// {	return Point3D();}
+// float
+// Object::pdf(ShadeRec&)
+// {	return 1; }
+// Normal
+// Object::get_normal(const Point3D&)
+// {	return Normal(); }
 
 /* NOTE: Implementation of Sphere */
-Sphere::Sphere(): center(), radius(0.0f) {}
-Sphere::Sphere(const Point3D& ct, const float r, Material *m_):
-	center(ct),
-	radius(r)
-{
-	Object::set_material(m_);
-}
+// Sphere::Sphere(): center(), radius(0.0f) {}
+// Sphere::Sphere(const Point3D& ct, const float r, Material *m_):
+//     center(ct),
+//     radius(r)
+// {
+//     Object::set_material(m_);
+// }
 
-bool
-Sphere::hit(const Ray& ray, float& tmin, ShadeRec& sr)
-{
-	float t;
-	Vector3D temp = ray.o - center;
-	float a = ray.d * ray.d;
-	float b = ray.d * 2.0f * temp;
-	float c = temp * temp - radius * radius;
-	float disc = b * b - 4.0f * a * c;
+// bool
+// Sphere::hit(const Ray& ray, float& tmin, ShadeRec& sr)
+// {
+//     float t;
+//     Vector3D temp = ray.o - center;
+//     float a = ray.d * ray.d;
+//     float b = ray.d * 2.0f * temp;
+//     float c = temp * temp - radius * radius;
+//     float disc = b * b - 4.0f * a * c;
 
-	if (disc < 0)
-		return false;
-	else {
-		float e = sqrtf(disc);
-		float denom = 2.0 * a;
-		t = (-b - e) / denom;
-		if (t > eps) {
-			tmin = t;
-			sr.normal = temp + ray.d * t;
-			sr.local_hit_point = ray.o + ray.d * t;
-			return true;
-		}
+//     if (disc < 0)
+//         return false;
+//     else {
+//         float e = sqrtf(disc);
+//         float denom = 2.0 * a;
+//         t = (-b - e) / denom;
+//         if (t > eps) {
+//             tmin = t;
+//             sr.normal = temp + ray.d * t;
+//             sr.local_hit_point = ray.o + ray.d * t;
+//             return true;
+//         }
 
-		t = (-b + e) / denom;
-		if (t > eps) {
-			tmin = t;
-			sr.normal = temp + ray.d * t;
-			sr.local_hit_point = ray.o + ray.d * t;
-			return true;
-		}
-	}
-	return false;
-}
+//         t = (-b + e) / denom;
+//         if (t > eps) {
+//             tmin = t;
+//             sr.normal = temp + ray.d * t;
+//             sr.local_hit_point = ray.o + ray.d * t;
+//             return true;
+//         }
+//     }
+//     return false;
+// }
 
-bool
-Sphere::shadow_hit(const Ray& ray, float& tmin)
-{
-	ShadeRec dummy_sr;
-	return hit(ray, tmin, dummy_sr);
-}
+// bool
+// Sphere::shadow_hit(const Ray& ray, float& tmin)
+// {
+//     ShadeRec dummy_sr;
+//     return hit(ray, tmin, dummy_sr);
+// }
 
-BBox
-Sphere::get_bounding_box(void)
-{
-	float dist = sqrtf(3 * radius * radius);
-	return BBox(center.x - dist, center.y - dist, center.z - dist,
-		 center.x + dist, center.y + dist, center.z + dist);
-}
+// BBox
+// Sphere::get_bounding_box(void)
+// {
+//     float dist = sqrtf(3 * radius * radius);
+//     return BBox(center.x - dist, center.y - dist, center.z - dist,
+//          center.x + dist, center.y + dist, center.z + dist);
+// }
 
-void
-Sphere::set_center(float x, float y, float z) { center = Point3D(x, y, z); }
-void
-Sphere::set_radius(float r) { radius = r; }
+// void
+// Sphere::set_center(float x, float y, float z) { center = Point3D(x, y, z); }
+// void
+// Sphere::set_radius(float r) { radius = r; }
 
 
 /* NOTE: Implementation of Plane */
