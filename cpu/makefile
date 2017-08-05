@@ -1,8 +1,7 @@
 RELEASE		= -w -std=c++14 -O2
 DEBUG		= -std=c++14 -g
-OBJECTS		= object/BBox.cpp
 MODELS		= Light.cpp Material.cpp BRDF.cpp
-UTILITIES	= sampler.cpp RGBColor.cpp ShadeRec.cpp Utilities.cpp camera.cpp
+UTILITIES	= sampler.cpp RGBColor.cpp Utilities.cpp camera.cpp
 TARGET		= renderer
 
 default: clean release
@@ -12,10 +11,10 @@ test: clean $(TARGET)
 	open result.ppm
 
 release:
-	g++ main.cpp $(OBJECTS) $(MODELS) $(UTILITIES) $(RELEASE) -o $(TARGET)
+	g++ main.cpp $(MODELS) $(UTILITIES) $(RELEASE) -o $(TARGET)
 
 debug: clean_debug
-	g++ main.cpp $(OBJECTS) $(MODELS) $(UTILITIES) $(DEBUG) -o debug
+	g++ main.cpp $(MODELS) $(UTILITIES) $(DEBUG) -o debug
 
 clean:
 	rm -f renderer
