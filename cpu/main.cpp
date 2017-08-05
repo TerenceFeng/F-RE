@@ -107,22 +107,6 @@ void add_plane()
 	world.add_object(plane_ptr);
 }
 
-void read_ply_file(char *filename)
-{
-	Phong* phont_ptr = new Phong;
-	phont_ptr->set_ka(0.1);
-	phont_ptr->set_kd(0.9);
-	phont_ptr->set_ks(0.45);
-	phont_ptr->set_es(5);
-	phont_ptr ->set_color(RGBColor(0.4, 1.0, 0.58));
-
-	Grid *grid_ptr = new Grid;
-	grid_ptr->read_ply_file(filename);
-	grid_ptr->set_material(phont_ptr);
-	grid_ptr->setup_cells();
-	world.add_object(grid_ptr);
-}
-
 void
 test_path_tracing()
 {
@@ -212,10 +196,6 @@ main(int argc, char ** argv)
     sampler = NRooks(100);
 	sampler.map_samples_to_hemisphere(1);
 
-	if (argc == 2)
-	{
-        read_ply_file(argv[1]);
-	}
 	// test_path_tracing();
 	test_cornell_box();
 	camera.render_scene();
