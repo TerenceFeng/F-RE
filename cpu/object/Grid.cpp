@@ -11,11 +11,11 @@
 #include <cfloat>
 #include <iostream>
 
-inline float
-clamp(float x, float min, float max)
-{
-	return (x < min ? min : (x > max ? max : x));
-}
+// inline float
+// clamp(float x, float min, float max)
+// {
+//     return (x < min ? min : (x > max ? max : x));
+// }
 
 Mesh::Mesh(void):
 	vertices(),

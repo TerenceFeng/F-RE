@@ -1,6 +1,6 @@
 RELEASE		= -w -std=c++14 -O2
 DEBUG		= -std=c++14 -g
-OBJECTS		= object/Object.cpp object/Grid.cpp ply.cpp object/BBox.cpp
+OBJECTS		= object/Grid.cpp ply.cpp object/BBox.cpp
 MODELS		= Light.cpp Material.cpp BRDF.cpp
 UTILITIES	= sampler.cpp RGBColor.cpp ShadeRec.cpp Utilities.cpp World.cpp camera.cpp
 TARGET		= renderer
