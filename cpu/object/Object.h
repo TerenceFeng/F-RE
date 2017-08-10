@@ -17,7 +17,9 @@
 #include "../Material.h"
 #include "../sampler.h"
 
+#ifndef INV_PI
 #define INV_PI 0.31831f
+#endif
 
 inline float
 clamp(float x, float min, float max)

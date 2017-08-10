@@ -1,6 +1,6 @@
 RELEASE		= -w -std=c++14 -O2
 DEBUG		= -std=c++14 -g
-MODELS		= Light.cpp Material.cpp BRDF.cpp
+MODELS		= Light.cpp Material.cpp
 UTILITIES	= sampler.cpp
 TARGET		= renderer
 
