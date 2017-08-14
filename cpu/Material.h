@@ -1,6 +1,5 @@
 
 /* ====================================================
-#   Copyright (C)2017 All rights reserved.
 #   Author        : Terence (Yongxin) Feng
 #   Email         : tyxfeng@gmail.com
 #   File Name     : Material.h
@@ -13,8 +12,6 @@
 #include "RGBColor.h"
 #include "ShadeRec.h"
 #include <vector>
-
-class Object;
 
 class Material
 {

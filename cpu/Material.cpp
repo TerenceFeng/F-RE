@@ -6,7 +6,6 @@
 # ====================================================*/
 #include "World.h"
 #include "Material.h"
-#include "object/Object.h"
 #include <cmath>
 #include <cstdio>
 
