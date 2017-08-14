@@ -1,6 +1,5 @@
 
 /* ====================================================
-#   Copyright (C)2017 All rights reserved.
 #   Author        : Terence (Yongxin) Feng
 #   Email         : tyxfeng@gmail.com
 #   File Name     : Material.cpp
@@ -100,9 +99,9 @@ Matte::area_light_shade(ShadeRec& sr) const
 		if (ndotwi > 0.0f)
 		{
 			Ray shadow_ray(sr.hit_point, wi);
-			bool in_shadow = light_ptr->in_shadow(shadow_ray);
+			bool is_in_shadow = in_shadow(shadow_ray);
 
-			if (!in_shadow)
+			if (!is_in_shadow)
 			{
 				L += diffuse_brdf->f(sr, wo, wi)
 						* light_ptr->L(sr)
@@ -216,9 +215,9 @@ Phong::area_light_shade(ShadeRec& sr) const
 		float ndotwi = sr.normal * wi;
 		if (ndotwi > 0.0f) {
 			Ray shadowRay(sr.hit_point, wi);
-			bool in_shadow = light_ptr->in_shadow(shadowRay);
+			bool is_in_shadow = in_shadow(shadowRay);
 
-			if (!in_shadow)
+			if (!is_in_shadow)
 				L += (diffuse_brdf->f(sr, wo, wi)
 						+ specular_brdf->f(sr, wo, wi))
 					* light_ptr->L(sr)

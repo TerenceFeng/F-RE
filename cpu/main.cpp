@@ -21,6 +21,14 @@ World world;
 Camera camera;
 NRooks sampler;
 
+bool in_shadow(const Ray& ray) {
+float t = FLT_MAX;
+for (auto& obj: world.obj_ptrs)
+    if(obj->shadow_hit(ray, t))
+        return true;
+return false;
+}
+
 void
 add_ambient_occ()
 {
@@ -196,8 +204,8 @@ main(int argc, char ** argv)
     sampler = NRooks(100);
 	sampler.map_samples_to_hemisphere(1);
 
-	// test_path_tracing();
-	test_cornell_box();
+    test_path_tracing();
+    // test_cornell_box();
 	camera.render_scene();
 	return 0;
 }

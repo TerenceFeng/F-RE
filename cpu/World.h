@@ -1,15 +1,8 @@
 
 /* ====================================================
-#   Copyright (C)2017 All rights reserved.
-#
 #   Author        : Terence (Yongxin) Feng
 #   Email         : tyxfeng@gmail.com
 #   File Name     : World.h
-#   Last Modified : 2017-03-21 17:08
-#   Describe      :
-#
-#   Log           :
-#
 # ====================================================*/
 
 #ifndef  _WORLD_H
@@ -52,7 +45,6 @@ public:
     {
         light_ptrs.push_back(light_ptr);
     }
-
 
 };
 

@@ -10,7 +10,6 @@
 #define _MATERIAL_H
 
 #include "BRDF.h"
-#include "Light.h"
 #include "RGBColor.h"
 #include "ShadeRec.h"
 #include <vector>
