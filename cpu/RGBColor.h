@@ -46,17 +46,17 @@ public:
         return (*this);
     }
 
-    inline RGBColor operator * (const float k) const
+    RGBColor operator * (const float k) const
     {
         return RGBColor(r * k, g * k, b * k);
     }
 
-    inline RGBColor operator * (const RGBColor& color) const
+    RGBColor operator * (const RGBColor& color) const
     {
         return RGBColor(r * color.r, g * color.g, b * color.b);
     }
 
-    inline RGBColor& operator *= (const float k)
+    RGBColor& operator *= (const float k)
     {
         r *= k;
         g *= k;
@@ -64,7 +64,7 @@ public:
         return (*this);
     }
 
-    inline RGBColor& operator /= (const float k)
+    RGBColor& operator /= (const float k)
     {
         r /= k;
         g /= k;
@@ -72,7 +72,7 @@ public:
         return (*this);
     }
 
-    inline RGBColor& operator += (const RGBColor& color)
+    RGBColor& operator += (const RGBColor& color)
     {
         r += color.r;
         g += color.g;
@@ -80,14 +80,14 @@ public:
         return (*this);
     }
 
-    inline RGBColor operator + (const RGBColor& color)
+    RGBColor operator + (const RGBColor& color)
     {
         return RGBColor(r + color.r,
                 g + color.g,
                 b + color.b);
     }
 
-    inline RGBColor operator / (const float f)
+    RGBColor operator / (const float f)
     {
         return RGBColor(r / f,
                 g / f,

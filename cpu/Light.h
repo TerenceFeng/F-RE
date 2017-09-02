@@ -65,11 +65,11 @@ public:
     {
         return color * ls;
     }
-    inline void scale_radiance(const float b)
+    void scale_radiance(const float b)
     {
         ls = b;
     }
-    inline void set_color(const RGBColor& color_)
+    void set_color(const RGBColor& color_)
     {
         color = color_;
     }

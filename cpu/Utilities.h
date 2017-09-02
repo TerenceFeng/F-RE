@@ -30,7 +30,7 @@ public:
         return (*this);
     }
 
-	inline Vector2D operator * (const float a) const {
+	Vector2D operator * (const float a) const {
 		return Vector2D(x * a, y * a);
 	}
 };
@@ -61,47 +61,47 @@ public:
         return (*this);
     }
 
-	inline Vector3D operator* (const float a) const {
+	Vector3D operator* (const float a) const {
 		return Vector3D(x * a, y * a, z * a);
 	}
-	inline Vector3D operator/ (const float a) const {
+	Vector3D operator/ (const float a) const {
 		return Vector3D(x / a, y / a, z / a);
 	}
-	inline Vector3D operator+ (const Vector3D& v) const {
+	Vector3D operator+ (const Vector3D& v) const {
 		return Vector3D(x + v.x, y + v.y, z + v.z);
 	}
-	inline Vector3D& operator+= (const Vector3D& v) {
+	Vector3D& operator+= (const Vector3D& v) {
 		this->x += v.x;
 		this->y += v.y;
 		this->z += v.z;
 		return (*this);
 	}
-	inline Vector3D operator- (const Vector3D& v) const {
+	Vector3D operator- (const Vector3D& v) const {
 		return Vector3D(x - v.x, y - v.y, z - v.z);
 	}
-	inline float operator* (const Vector3D& b) const {
+	float operator* (const Vector3D& b) const {
 		return x * b.x + y * b.y + z * b.z;
 	}
-	inline Vector3D operator^ (const Vector3D& v) const {
+	Vector3D operator^ (const Vector3D& v) const {
 		return Vector3D(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x);
 	}
-	inline Vector3D operator-() const {
+	Vector3D operator-() const {
 		return Vector3D(-x, -y, -z);
 	}
-	inline bool operator== (const Vector3D& v) const {
+	bool operator== (const Vector3D& v) const {
 		return x == v.x && y == v.y && z == v.z;
 	}
-	inline float length() {
+	float length() {
 		return sqrtf(this->len_squared());
 	}
-	inline float len_squared() {
+	float len_squared() {
 		return x * x + y * y + z * z;
 	}
     float distance(const Vector3D& v) const
     {
         return sqrtf(distance_sqr(v));
     }
-	inline float distance_sqr(const Vector3D& v) const {
+	float distance_sqr(const Vector3D& v) const {
 		return (x - v.x) * (x - v.x) + (y - v.y) * (y - v.y) + (z - v.z) * (z - v.z);
 	}
 	void normalize()
@@ -109,7 +109,7 @@ public:
         float len = this->length();
         x /= len; y /= len; z /= len;
     }
-	inline Vector3D& hat()
+	Vector3D& hat()
     {
         this->normalize();
         return (*this);
