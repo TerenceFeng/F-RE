@@ -15,15 +15,11 @@ public:
 	float r, g, b;
 
     RGBColor():
-        r(0.0),
-        g(0.0),
-        b(0.0)
+        RGBColor(0.0f)
     {}
 
     RGBColor(float c):
-        r(c),
-        g(c),
-        b(c)
+        RGBColor(c, c, c)
     {}
 
     RGBColor(float _r, float _g, float _b):
@@ -33,12 +29,10 @@ public:
     {}
 
     RGBColor(const RGBColor& c):
-        r(c.r),
-        g(c.g),
-        b(c.b)
+        RGBColor(c.r, c.g, c.b)
     {}
 
-	RGBColor& operator = (const RGBColor& rhs)
+    RGBColor& operator = (const RGBColor& rhs)
     {
         r = rhs.r;
         g = rhs.g;
@@ -83,15 +77,15 @@ public:
     RGBColor operator + (const RGBColor& color)
     {
         return RGBColor(r + color.r,
-                g + color.g,
-                b + color.b);
+                        g + color.g,
+                        b + color.b);
     }
 
     RGBColor operator / (const float f)
     {
         return RGBColor(r / f,
-                g / f,
-                b / f);
+                        g / f,
+                        b / f);
     }
 };
 

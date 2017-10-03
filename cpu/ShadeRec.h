@@ -13,28 +13,18 @@
 
 struct ShadeRec
 {
-	bool		hit_an_object;
-	Point3D		hit_point;
-	Point3D		local_hit_point;
-	Normal		normal;
-	Normal		reflected_dir;
-	RGBColor	color;
-	Ray			ray;
-	int			depth;
-	Vector3D	dir;
-	float t;
+    bool        hit_an_object;
+    Point3D     hit_point;
+    Point3D     local_hit_point;
+    Normal      normal;
+    Normal      reflected_dir;
+    RGBColor    color;
+    Ray         ray;
+    int         depth;
+    Vector3D    dir;
+    float       t;
 
-    ShadeRec():
-        hit_an_object(false),
-        hit_point(),
-        local_hit_point(),
-        normal(),
-        reflected_dir(),
-        color(),
-        ray(),
-        depth(0),
-        dir()
-    {}
+    ShadeRec() {}
 
     ShadeRec(const ShadeRec& sr):
         hit_an_object(sr.hit_an_object),
@@ -48,8 +38,7 @@ struct ShadeRec
         dir(sr.dir)
     {}
 
-    ShadeRec&
-    operator= (const ShadeRec& rhs)
+    ShadeRec& operator = (const ShadeRec& rhs)
     {
         hit_an_object = rhs.hit_an_object;
         hit_point = rhs.hit_point;

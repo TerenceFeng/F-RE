@@ -15,12 +15,11 @@ class Vector2D
 public:
 	float x, y;
 
-	Vector2D(): x(0.0f), y(0.0f) {}
-	Vector2D(float a): x(a), y(a) {}
+	Vector2D() {}
+	Vector2D(float a): Vector2D(a, a) {}
 	Vector2D(float x_, float y_): x(x_), y(y_) {}
 	Vector2D(const Vector2D& v):
-        x(v.x),
-        y(v.y)
+        Vector2D(v.x, v.y)
     {}
 
 	Vector2D& operator = (const Vector2D& rhs)
@@ -40,17 +39,15 @@ class Vector3D
 public:
 	float x, y, z;
 
-	Vector3D(): x(0.0f), y(0.0f), z(0.0f) {}
-	Vector3D(float a): x(a), y(a), z(a) {}
+	Vector3D() {}
+	Vector3D(float a): Vector3D(a, a, a) {}
 	Vector3D(float x_, float y_, float z_):
         x(x_),
         y(y_),
         z(z_)
     {}
 	Vector3D(const Vector3D& v):
-        x(v.x),
-        y(v.y),
-        z(v.z)
+        Vector3D(v.x, v.y, v.z)
     {}
 
 	Vector3D& operator = (const Vector3D& rhs)
@@ -126,14 +123,12 @@ public:
 	Vector3D d;
 	Point3D o;
 
-	Ray():
-        d(),
-        o()
-    {}
+	Ray() {}
+
 	Ray(const Ray& r):
-        d(r.d),
-        o(r.o)
+        Ray(r.o, r.d)
     {}
+
 	Ray(const Point3D& o_, const Point3D& d_):
         o(o_),
         d(d_)

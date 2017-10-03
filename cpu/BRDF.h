@@ -23,9 +23,11 @@ extern NRooks sampler;
 class BRDF
 {
 public:
-	BRDF(void):
-        color(BLACK)
+    BRDF() {}
+    BRDF(const RGBColor c_):
+        color(c_)
     {}
+
 	void set_sampler(Sampler* s)
     {
         sampler_ptr = s;
@@ -34,6 +36,7 @@ public:
     {
         color = c;
     }
+    virtual RGBColor sample_f(const ShadeRec& sr, const Vector3D& wo, Vector3D& wi, float& f) const = 0;
 
 protected:
 	Sampler* sampler_ptr;
@@ -43,21 +46,19 @@ protected:
 class Lambertian: public BRDF
 {
 public:
-	Lambertian():
-        BRDF(),
-        kd(0.0f)
-    {}
+	Lambertian() {}
+
 	Lambertian(const float kd_, const RGBColor& c_):
+        BRDF(c_),
         kd(kd_)
-    {
-        color = c_;
-    }
+    {}
+
     virtual RGBColor f(const ShadeRec& sr, const Vector3D& wo, const Vector3D& wi) const
     {
         return (color * (kd * INV_PI));
     }
 
-    RGBColor sample_f(const ShadeRec& sr, const Vector3D& wo, Vector3D& wi, float& pdf) const
+    virtual RGBColor sample_f(const ShadeRec& sr, const Vector3D& wo, Vector3D& wi, float& pdf) const
     {
         Vector3D w = sr.normal;
         Vector3D v = Vector3D(0.0034, 1.0, 0.0071) ^ w;
@@ -95,13 +96,13 @@ public:
     {}
 
     GlossySpecular(float ks_, float e_, RGBColor c_):
+        BRDF(c_),
         ks(ks_),
         e(e_)
-    {
-        color = c_;
-    }
+    {}
 
     GlossySpecular(const Lambertian& g_);
+
     virtual RGBColor f(const ShadeRec& sr, const Vector3D& wo, const Vector3D& wi) const
     {
         RGBColor L;
@@ -115,7 +116,7 @@ public:
         return L;
     }
 
-    RGBColor sample_f(const ShadeRec& sr, const Vector3D& wo, Vector3D& wi, float& pdf) const
+    virtual RGBColor sample_f(const ShadeRec& sr, const Vector3D& wo, Vector3D& wi, float& pdf) const
     {
         float ndotwo = sr.normal * wo;
         Vector3D r = -wo + sr.normal * ndotwo * 2.0;
@@ -178,12 +179,11 @@ public:
     {}
 
     PerfectSpecular(const float kr_, const RGBColor& c_):
+        BRDF(c_),
         kr(kr_)
-    {
-        color = c_;
-    }
+    {}
 
-    RGBColor sample_f(const ShadeRec& sr, const Vector3D& wo, Vector3D& wi, float& f) const
+    virtual RGBColor sample_f(const ShadeRec& sr, const Vector3D& wo, Vector3D& wi, float& f) const
     {
         float ndotwo = sr.normal * wo;
         wi = -wo + sr.normal * ndotwo * 2.0;
